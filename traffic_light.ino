@@ -3,6 +3,7 @@
 #include <ESP8266WebServer.h>
 
 // Set WiFi credentials
+#define WIFIS {{"GD57A", "En1lug@rdelaMancha"},{"Poliwifi", "fader1946"}}
 #define WIFI_SSID "GD57A"
 #define WIFI_PASS "En1lug@rdelaMancha"
 //#define WIFI_SSID "Poliwifi"
