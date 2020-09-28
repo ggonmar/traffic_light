@@ -1,6 +1,7 @@
 #include <WEMOS_SHT3X.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <EasyDDNS.h>
 
 // Set WiFi credentials
 const String WIFIS[] = {"GD57A", "Poliwifi","LaCasaDeNemo"};
@@ -53,18 +54,13 @@ int findValidWifi(){
   int nbVisibleNetworks =0;
   while( nbVisibleNetworks == 0)
   {
-    Serial.println("Going to scan");
     int nbVisibleNetworks = WiFi.scanNetworks();
-    Serial.println("Scanned");
     if (nbVisibleNetworks == 0) {
       Serial.println("no networks found. Reset to try again");
     }
     if(nbVisibleNetworks > 0)
         break;
   }
-  Serial.print("Found ");
-  Serial.print(nbVisibleNetworks);
-  Serial.println(" wifis in the area.");
 
   boolean foundValidWifi=false;
   int i=0;
@@ -105,12 +101,21 @@ void connectToWifi(int index){
   // WiFi Connected
   Serial.println("");
   Serial.println("Connected!");
-  Serial.print("IP address: ");
+  Serial.print("IP: ");
   Serial.println(WiFi.localIP());
   Serial.print("MAC: ");
   Serial.println(WiFi.macAddress());
 }
 
+void establishDDNS(){
+  Serial.println("Establishing DynDNS");
+  EasyDDNS.service("noip");
+  EasyDDNS.client("semaforo.myddns.me", "ggonzalezmartin@gmail.com", "PUT0noip!");
+  EasyDDNS.onUpdate([&](const char* oldIP, const char* newIP){
+  Serial.print("EasyDDNS - IP Change Detected: ");
+  Serial.println(newIP);
+  });
+}
 // WEBSERVER functions
 void initialiseWebServer(){
   Serial.println("Initialising Webserver");
@@ -207,6 +212,8 @@ void setup() {
   int wifiIndex =findValidWifi();
   connectToWifi(wifiIndex);
 
+  establishDDNS();
+
   initialiseWebServer();
 
   initialiseTrafficLight();
@@ -234,4 +241,3 @@ else
 Serial.println("Error!");
 }
 */
-
