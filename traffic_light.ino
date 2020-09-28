@@ -3,8 +3,8 @@
 #include <ESP8266WebServer.h>
 
 // Set WiFi credentials
-const char* WIFIS[] = {"GD57A", "Poliwifi","LaCasaDeNemo"};
-const char* PWDS[] = {"En1lug@rdelaMancha", "fader1946", "Olivia2017"};
+const String WIFIS[] = {"GD57A", "Poliwifi","LaCasaDeNemo"};
+const String PWDS[] = {"En1lug@rdelaMancha", "fader1946", "Olivia2017"};
 
 const String HTMLcerrado="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:red'><h1 style='color:white'>Cerrado</h1><div style='color:white'>Por favor, no acceda.<p>Refrescar la pagina para abrir el semaforo</div><img src='https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
 const String HTMLabierto="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:green'><h1 style='color:white'>Abierto</h1><div style='color:white'>Adelante, puede pasar.<p>Refrescar la pagina para cerrar el semaforo</div><img src='https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
@@ -35,28 +35,8 @@ IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 
-void setup() {
-  Serial.begin(115200);
-
-  definePins();
-  setTrafficLightAsLoading();
-
-  int wifiIndex =findValidWifi();
-  connectToWifi(wifiIndex);
-
-  initialiseWebServer();
-
-  initialiseTrafficLight();
-}
-
-void loop() {
-  //  printTemperature();
-  webserver.handleClient();
-  //printTemperature();
-  //sequentialDemo();
-}
-
 void definePins(){
+  Serial.println("Define pins");
   pinMode(green, OUTPUT);
   pinMode(yellow, OUTPUT);
   pinMode(red, OUTPUT);
@@ -67,7 +47,54 @@ void definePins(){
 }
 
 // WIFI functions
+int findValidWifi(){
+  Serial.println("Finding valid Wifi");
+
+  int nbVisibleNetworks =0;
+  while( nbVisibleNetworks == 0)
+  {
+    Serial.println("Going to scan");
+    int nbVisibleNetworks = WiFi.scanNetworks();
+    Serial.println("Scanned");
+    if (nbVisibleNetworks == 0) {
+      Serial.println("no networks found. Reset to try again");
+    }
+    if(nbVisibleNetworks > 0)
+        break;
+  }
+  Serial.print("Found ");
+  Serial.print(nbVisibleNetworks);
+  Serial.println(" wifis in the area.");
+
+  boolean foundValidWifi=false;
+  int i=0;
+  int j;
+  while(foundValidWifi != true)
+  {
+    String candidate_ssid = WiFi.SSID(i);
+    Serial.print("Checking ");
+    Serial.println(candidate_ssid);
+    for(j=0; j<sizeof(WIFIS); j++)
+    {
+      if(WIFIS[j].equals(candidate_ssid))
+      {
+        Serial.print("THIS IS IT: ");
+        foundValidWifi=true;
+        break;
+      }
+    }
+
+    if(foundValidWifi == true)
+       break;
+    i=i+1;
+  }
+  Serial.println(WIFIS[j]);
+  return j;
+}
+
 void connectToWifi(int index){
+  Serial.println("Connecting to selected wifi");
+
   WiFi.begin(WIFIS[index], PWDS[index]);
 
   if (!WiFi.config(local_IP, gateway, subnet)) {
@@ -84,48 +111,28 @@ void connectToWifi(int index){
   Serial.println(WiFi.macAddress());
 }
 
-int findValidWifi(){
-  int nbVisibleNetworks = WiFi.scanNetworks();
-  if (nbVisibleNetworks == 0) {
-    Serial.println(F("no networks found. Reset to try again"));
-    while (true); // no need to go further, hang in there, will auto launch the Soft WDT reset
-  }
-
-  boolean foundValidWifi=false;
-  int i, j;
-  for (i = 0; i < nbVisibleNetworks; ++i) {
-    for(j=0; j<sizeof(WIFIS); j++){
-      if(!strcmp(WiFi.SSID(i).c_str(), WIFIS[j]))
-      {
-        foundValidWifi=true;
-        break;
-      }
-    }
-    if(foundValidWifi)
-    break;
-  }
-  Serial.print("Trying to connect to");
-  Serial.println(WIFIS[j]);
-  return j;
-}
-
 // WEBSERVER functions
 void initialiseWebServer(){
+  Serial.println("Initialising Webserver");
   webserver.on("/", rootPage);
   webserver.onNotFound(notfoundPage);
   webserver.begin();
+  Serial.println("Webserver is up and running");
   return;
 }
 
 void rootPage() {
+  Serial.println("new connection");
   if(semaforoAbierto)
   {
+    Serial.println("Cerrando semaforo");
     webserver.send(200, "text/html", HTMLcerrado);
     cerrarSemaforo(AMBAR_TIME);
     semaforoAbierto=false;
   }
   else
   {
+    Serial.println("Abriendo semaforo");
     webserver.send(200, "text/html", HTMLabierto);
     abrirSemaforo(AMBAR_TIME);
     semaforoAbierto=true;
@@ -163,6 +170,7 @@ void sequentialDemo(){
 }
 
 void setTrafficLightAsLoading(){
+  establishColor(yellow);
   return;
 }
 
@@ -189,6 +197,29 @@ void establishColor(int color){
     analogWrite(colors[i], 0);
   }
 }
+
+void setup() {
+  Serial.begin(115200);
+
+  definePins();
+  setTrafficLightAsLoading();
+
+  int wifiIndex =findValidWifi();
+  connectToWifi(wifiIndex);
+
+  initialiseWebServer();
+
+  initialiseTrafficLight();
+}
+
+void loop() {
+  //  printTemperature();
+  webserver.handleClient();
+  //printTemperature();
+  //sequentialDemo();
+}
+
+
 
 /*
 // Temperature Logic
