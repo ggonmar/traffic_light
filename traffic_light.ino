@@ -22,12 +22,12 @@ const int d7=13;
 const int green = d6;
 const int yellow = d5;
 const int red = d0;
+int colors[]= {green, yellow, red};
+
 const int GND = d7;
 
 const int DELAY_TIME = 5000;
 const int AMBAR_TIME = 5;
-
-ESP8266WebServer webserver(80);
 boolean semaforoAbierto=true;
 
 //IP Handling
@@ -35,6 +35,25 @@ IPAddress local_IP(192, 168, 1, 23);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
 
+
+void setup() {
+  Serial.begin(115200);
+  definePins();
+  setTrafficLightAsLoading();
+
+  int wifiIndex =findValidWifi();
+  connectToWifi(wifiIndex);
+
+  establishDDNS();
+
+  initialiseWebServer();
+
+  initialiseTrafficLight();
+}
+
+void loop() {
+  webserver.handleClient();
+}
 
 void definePins(){
   Serial.println("Define pins");
@@ -192,38 +211,28 @@ void transition(int high, int mid, int low){
 }
 
 void establishColor(int color){
-  int colors[]= {green, yellow, red};
-  int i=0;
+  int i;
   for (i=0;i<3; i++)
   {
     if(color == colors[i])
-    analogWrite(color, 1023);
+      analogWrite(color, 1023);
     else
-    analogWrite(colors[i], 0);
+      analogWrite(colors[i], 0);
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-
-  definePins();
-  setTrafficLightAsLoading();
-
-  int wifiIndex =findValidWifi();
-  connectToWifi(wifiIndex);
-
-  establishDDNS();
-
-  initialiseWebServer();
-
-  initialiseTrafficLight();
+void turnOff()
+{
+  int i;
+  for(i=0; i< sizeof(colors); i++)
+    analogWrite(colors[i], 0);
 }
 
-void loop() {
-  //  printTemperature();
-  webserver.handleClient();
-  //printTemperature();
-  //sequentialDemo();
+void blink(int color){
+  turnOff();
+  establishColor(color);
+  delay(300);
+  turnOff();
 }
 
 
