@@ -146,7 +146,21 @@ void initialiseWebServer(){
 
 String getProperHTML(){
   String htmlCode;
-  
+  htmlCode =""
+"<html>"
+"   <title>Semaforo de Reunion 1.0 </title>"
+"   <body>"
+"     <h1 id='title' style='color:white'></h1>"
+"     <div id='message' style='color:white'></div>"
+"     <img id='image' src='' style='height:300px; position:absolute; top:10px; left:300px'>"
+"     <div style='padding-top:50px'>"
+"           <form action='/TRAFFICLIGHT' method='POST'>"
+"              <input id='button' type='submit' value='' style='width:250px; height:150px'>"
+"           </form>"
+"     </div>"
+"   </body>"
+"</html>";
+
   if(semaforoAbierto)
   {
       htmlCode= "<html><title>[Abierto] Semaforo de Reunion 1.0 </title>";
