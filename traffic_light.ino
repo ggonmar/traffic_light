@@ -7,12 +7,7 @@
 const String WIFIS[] = {"GD57A", "Poliwifi","LaCasaDeNemo"};
 const String PWDS[] = {"En1lug@rdelaMancha", "fader1946", "Olivia2017"};
 
-const String HTMLcerrado="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:red'><h1 style='color:white'>Cerrado</h1><div style='color:white'>Por favor, no acceda.<p>Refrescar la pagina para abrir el semaforo</div><img src='https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
-const String HTMLabierto="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:green'><h1 style='color:white'>Abierto</h1><div style='color:white'>Adelante, puede pasar.<p>Refrescar la pagina para cerrar el semaforo</div><img src='https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
-
-
-//SHT3X sht30(0x45);
-
+ESP8266WebServer webserver;
 
 const int d0=16;
 const int d5=14;
@@ -34,6 +29,9 @@ boolean semaforoAbierto=true;
 IPAddress local_IP(192, 168, 1, 23);
 IPAddress gateway(192, 168, 1, 1);
 IPAddress subnet(255, 255, 255, 0);
+
+//const String HTMLcerrado="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:red'><h1 style='color:white'>Cerrado</h1><div style='color:white'>Por favor, no acceda.<p>Refrescar la pagina para abrir el semaforo</div><img src='https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
+//const String HTMLabierto="<html><title> Semaforo de Reunion 1.0 </title><body style='background-color:green'><h1 style='color:white'>Abierto</h1><div style='color:white'>Adelante, puede pasar.<p>Refrescar la pagina para cerrar el semaforo</div><img src='https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png' style='height:300px; position:absolute; top:10px; left:300px'></body></html>";
 
 
 void setup() {
@@ -138,29 +136,78 @@ void establishDDNS(){
 // WEBSERVER functions
 void initialiseWebServer(){
   Serial.println("Initialising Webserver");
-  webserver.on("/", rootPage);
+  webserver.on("/", HTTP_GET, rootPage);
+  webserver.on("/TRAFFICLIGHT", HTTP_POST, handleTrafficLight);
   webserver.onNotFound(notfoundPage);
   webserver.begin();
   Serial.println("Webserver is up and running");
   return;
 }
 
-void rootPage() {
-  Serial.println("new connection");
+String getProperHTML(){
+  String htmlCode;
+  
   if(semaforoAbierto)
   {
+      htmlCode= "<html><title>[Abierto] Semaforo de Reunion 1.0 </title>";
+      htmlCode += "	<body style='background-color:green'>";
+}  else
+{
+    htmlCode = "<html><title>[Cerrado] Semaforo de Reunion 1.0 </title>";
+    htmlCode +=  "	<body style='background-color:red'>";
+}
+  if(semaforoAbierto)
+  {
+    htmlCode += ""
+    "		<h1 id=\"title\" style='color:white'>Abierto</h1>"
+    "		<div id=\"message\" style='color:white'>El acceso esta permitido.<p></div>"
+    "		<img id=\"image\" src=\"https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png\" style=\"height:300px; position:absolute; top:10px; left:300px\">"
+    "    <div style=\"padding-top:50px\">"
+    "        <form action=\"/TRAFFICLIGHT\" method=\"POST\">"
+    "			       <input id=\"button\" type=\"submit\" value=\"Cerrar semaforo\" style=\"width:250px; height:150px\">"
+    "        </form>"
+    "    </div>";
+  }else
+  {
+      htmlCode += ""
+    "		<h1 id=\"title\" style='color:white'>Cerrado</h1>"
+    "		<div id=\"message\" style='color:white'>El acceso esta restringido.<p></div>"
+    "		<img id=\"image\" src=\"https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png\" style=\"height:300px; position:absolute; top:10px; left:300px\">"
+    "    <div style=\"padding-top:50px\">"
+    "        <form action=\"/TRAFFICLIGHT\" method=\"POST\">"
+    "			       <input id=\"button\" type=\"submit\" value=\"Abrir semaforo\" style=\"width:250px; height:150px\">"
+    "        </form>"
+    "    </div>";
+
+  }
+  htmlCode += "  </body></html>";
+  return htmlCode;
+}
+void rootPage() {
+  Serial.println("new connection");
+  webserver.send(200, "text/html", getProperHTML());
+}
+
+void handleTrafficLight(){
+  if(semaforoAbierto)
+  {
+    sendJSCall("Processing");
     Serial.println("Cerrando semaforo");
-    webserver.send(200, "text/html", HTMLcerrado);
     cerrarSemaforo(AMBAR_TIME);
     semaforoAbierto=false;
+    sendJSCall("Cerrado");
   }
   else
   {
+    sendJSCall("Processing");
     Serial.println("Abriendo semaforo");
-    webserver.send(200, "text/html", HTMLabierto);
     abrirSemaforo(AMBAR_TIME);
     semaforoAbierto=true;
+    sendJSCall("Abierto");
   }
+
+  webserver.sendHeader("Location","/");        // Add a header to respond with a new location for the browser to go to the home page again
+  webserver.send(303);
 }
 
 // Handle 404
@@ -229,13 +276,38 @@ void turnOff()
 }
 
 void blink(int color){
+
   turnOff();
   establishColor(color);
   delay(300);
   turnOff();
 }
 
+void sendJSCall(String mode)
+{
 
+}
+/*
+function sendJSCall(mode)
+{
+    modes=[
+    {
+mode:"green", bg:"green", title:"Abierto", message:"Adelante", button:"Cerrar semaforo", disabled:false, src:"https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png"},
+{mode:"amber", bg:"orange", title:"Procesando...", message:"", button:"Procesando...", disabled:true, src:"https://www.clipartmax.com/png/full/267-2678270_traffic-light-amber-clip-art-at-clker-traffic-light-green-png.png"},
+{mode:"red", bg:"red", title:"Cerrado", message:"Prohibido el paso", button:"Abrir semaforo", disabled:false, src:"https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png"}];
+
+    mode=modes.filter(e => e.mode == mode)[0];
+  document.title = "[" + mode.title + "] Semaforo de Reunion 2.0";
+  document.body.style.backgroundColor = mode.bg;
+  document.getElementById("title").innerHTML = mode.title;
+  document.getElementById("message").innerHTML = mode.message;
+  document.getElementById("button").disabled = mode.disabled;
+  document.getElementById("button").value = mode.button;
+  document.getElementById("image").src =mode.src;
+
+console.log(mode);
+}
+*/
 
 /*
 // Temperature Logic
