@@ -146,57 +146,58 @@ void initialiseWebServer(){
 
 String getProperHTML(){
   String htmlCode;
+  String currentColor = "red";
+  if(semaforoAbierto)
+     currentColor="green";
+
   htmlCode =""
 "<html>"
 "   <title>Semaforo de Reunion 1.0 </title>"
-"   <body>"
+"   <head>"
+"   <script>"
+"   function sendJSCall(mode)"
+"   {"
+"       modes=["
+"         {mode:'green', bg:'green', title:'Abierto', message:'El acceso esta permitido', button:'Cerrar semaforo', disabled:false, src:'https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png'},"
+"         {mode:'amber', bg:'orange', title:'Procesando...', message:'...', button:'Procesando...', disabled:true, src:'https://www.clipartmax.com/png/full/267-2678270_traffic-light-amber-clip-art-at-clker-traffic-light-green-png.png'},"
+"         {mode:'red', bg:'red', title:'Cerrado', message:'El acceso esta restringido', button:'Abrir semaforo', disabled:false, src:'https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png'}"
+"       ];"
+""
+"     mode=modes.filter(e => e.mode == mode)[0];"
+"     document.title = '[' + mode.title + '] Semaforo de Reunion 2.0';"
+"     document.body.style.backgroundColor = mode.bg;"
+"     document.getElementById('title').innerHTML = mode.title;"
+"     document.getElementById('message').innerHTML = mode.message;"
+"     document.getElementById('button').disabled = mode.disabled;"
+"     document.getElementById('button').value = mode.button;"
+"     document.getElementById('image').src =mode.src;"
+""
+"   console.log(mode);"
+"   }"
+"   </script>"
+""
+"   <script>"
+"   function grabTrafficLightStatus(){"
+"     let x=fetch('/TRAFFICLIGHT').then(resp => resp.json());"
+"     console.log(x);"
+"   }"
+"   </script>"
+"   </head>"
+"   <body onload=sendJSCall('"+currentColor+"')>"
 "     <h1 id='title' style='color:white'></h1>"
 "     <div id='message' style='color:white'></div>"
 "     <img id='image' src='' style='height:300px; position:absolute; top:10px; left:300px'>"
 "     <div style='padding-top:50px'>"
-"           <form action='/TRAFFICLIGHT' method='POST'>"
+"           <form action='/TRAFFICLIGHT' method='POST' onsubmit='sendJSCall(\"amber\")'>"
 "              <input id='button' type='submit' value='' style='width:250px; height:150px'>"
 "           </form>"
 "     </div>"
 "   </body>"
 "</html>";
 
-  if(semaforoAbierto)
-  {
-      htmlCode= "<html><title>[Abierto] Semaforo de Reunion 1.0 </title>";
-      htmlCode += "	<body style='background-color:green'>";
-}  else
-{
-    htmlCode = "<html><title>[Cerrado] Semaforo de Reunion 1.0 </title>";
-    htmlCode +=  "	<body style='background-color:red'>";
-}
-  if(semaforoAbierto)
-  {
-    htmlCode += ""
-    "		<h1 id=\"title\" style='color:white'>Abierto</h1>"
-    "		<div id=\"message\" style='color:white'>El acceso esta permitido.<p></div>"
-    "		<img id=\"image\" src=\"https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png\" style=\"height:300px; position:absolute; top:10px; left:300px\">"
-    "    <div style=\"padding-top:50px\">"
-    "        <form action=\"/TRAFFICLIGHT\" method=\"POST\">"
-    "			       <input id=\"button\" type=\"submit\" value=\"Cerrar semaforo\" style=\"width:250px; height:150px\">"
-    "        </form>"
-    "    </div>";
-  }else
-  {
-      htmlCode += ""
-    "		<h1 id=\"title\" style='color:white'>Cerrado</h1>"
-    "		<div id=\"message\" style='color:white'>El acceso esta restringido.<p></div>"
-    "		<img id=\"image\" src=\"https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png\" style=\"height:300px; position:absolute; top:10px; left:300px\">"
-    "    <div style=\"padding-top:50px\">"
-    "        <form action=\"/TRAFFICLIGHT\" method=\"POST\">"
-    "			       <input id=\"button\" type=\"submit\" value=\"Abrir semaforo\" style=\"width:250px; height:150px\">"
-    "        </form>"
-    "    </div>";
-
-  }
-  htmlCode += "  </body></html>";
   return htmlCode;
 }
+
 void rootPage() {
   Serial.println("new connection");
   webserver.send(200, "text/html", getProperHTML());
@@ -309,7 +310,6 @@ function sendJSCall(mode)
 mode:"green", bg:"green", title:"Abierto", message:"Adelante", button:"Cerrar semaforo", disabled:false, src:"https://www.clipartmax.com/png/full/5-52723_clip-art-traffic-light-green-traffic-light-clipart.png"},
 {mode:"amber", bg:"orange", title:"Procesando...", message:"", button:"Procesando...", disabled:true, src:"https://www.clipartmax.com/png/full/267-2678270_traffic-light-amber-clip-art-at-clker-traffic-light-green-png.png"},
 {mode:"red", bg:"red", title:"Cerrado", message:"Prohibido el paso", button:"Abrir semaforo", disabled:false, src:"https://www.clipartmax.com/png/full/286-2868544_semaphore-red-light-red-traffic-light-icon.png"}];
-
     mode=modes.filter(e => e.mode == mode)[0];
   document.title = "[" + mode.title + "] Semaforo de Reunion 2.0";
   document.body.style.backgroundColor = mode.bg;
@@ -318,7 +318,6 @@ mode:"green", bg:"green", title:"Abierto", message:"Adelante", button:"Cerrar se
   document.getElementById("button").disabled = mode.disabled;
   document.getElementById("button").value = mode.button;
   document.getElementById("image").src =mode.src;
-
 console.log(mode);
 }
 */
