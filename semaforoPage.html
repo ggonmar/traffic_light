@@ -27,15 +27,9 @@
    }
    </script>
 
-   <script>
-   function grabTrafficLightStatus(){
-     let x=fetch('/TRAFFICLIGHT').then(resp => resp.json());
-     console.log(x);
-   }
-   </script>
    </head>
 <!--   <body onload=sendJSCall('"+currentColor+"')> -->
-	<body onload=sendJSCall('red')> 
+	<body onload=`sendJSCall('red')`> 
 	<h1 id='title' style='color:white'></h1>
 	 <div id='message' style='color:white'></div>
 	 <div style='height:300px; position:absolute; top:10px; left:300px'>
@@ -56,7 +50,7 @@
 		</svg>
 	</div>
 	<div style='padding-top:30px; text-align:center; width:280px'>
-           <form action='/TRAFFICLIGHT' method='POST' onsubmit='sendJSCall(\"amber\")'>
+           <form action='/TRAFFICLIGHT' method='POST' onsubmit=`sendJSCall('amber')`>
 			  <input id='status-button' type='submit' value='' style='width:250px; height:150px'>
 			  <br>
               <input id='on-off-button' type='submit' value='Apagar' style='width:150px; height:40px; margin-top:30px'>

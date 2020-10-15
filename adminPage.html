@@ -1,0 +1,45 @@
+<html>
+   <title>[ADMIN] Semaforo de Reunion 2.0 </title>
+   <head>
+   <script>
+     function addNew(){
+       let table=document.getElementById('ssids');
+       let index=table.rows.length-2;
+       var row = table.insertRow(index);
+
+      // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
+      var cell1 = row.insertCell(0);
+      var cell2 = row.insertCell(1);
+
+      // Add some text to the new cells:
+      cell1.innerHTML = `<input class='ssid' type='text' name='ssid-${index}' placeholder='SSID'/>`;
+      cell2.innerHTML = `<input class='pwd' type='text'  name='pwd-${index}' placeholder='Pwd'/>`;
+     }
+   </script>
+   </head>
+<!--   <body onload=sendJSCall('"+currentColor+"')> -->
+	<body> 
+	<h1 id='title'>Administration page</h1>
+  <form action='/ADMIN_SUBMIT' method='POST'>
+  <table id='ssids' style='border:0px'>
+    <tr>
+      <th>SSID</th>
+      <th>Password</th>
+    </tr>
+    <tr>
+      <td><input type='text' class='ssid' name='ssid-1' value='GD57A'/></td>
+      <td><input type='text' class='pwd' name='pwd-1' value='En1lug@rdelaMancha'/></td>
+    </tr>
+    <tr>
+      <td colspan=2 style='text-align:center'>
+        <button type='button' id='status-button' onclick='addNew()' style='width:100%; height:40px; margin-top:20px'>Añadir otro SSID</button>
+      </td>
+    </tr>
+    <tr>
+      <td colspan=2 style='text-align:center'>
+        <button id='status-button' type='submit' style='width:150px; height:70px; margin-top:30px'>Guardar</button>
+      </td>
+    </table>
+  </form>
+</body>
+</html>
