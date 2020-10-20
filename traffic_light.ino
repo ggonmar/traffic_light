@@ -2,12 +2,20 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <EasyDDNS.h>
+#include "FS.h"
+#include <ArduinoJson.h>
 
+String SSIDS_FILE = "/good_ssids.txt";
 
-// Set WiFi credentials
-static const String WIFIS[] = {"GD57A", "Poliwifi", "LaCasaDeNemo", "JuanPlas", "Polis8"};
-const String PWDS[] = {"En1lug@rdelaMancha", "fader1946", "Olivia2017", "internet", "milepolis8"};
-const String TYPE[] = {"wifi", "wifi", "wifi", "phone", "phone"};
+String SEMAFORO_HTML_FILE = "/semaforoPage.html";
+String ADMIN_HTML_FILE = "/adminPage.html";
+
+struct ssid
+{
+  String name;
+  String pwd;
+  bool type;
+};
 
 ESP8266WebServer webserver;
 MDNSResponder mdns;
@@ -28,6 +36,17 @@ const int AMBAR_TIME = 3;
 boolean semaforoAbierto = true;
 boolean semaforoEncendido = true;
 
+void resetSPIFFS()
+{
+  Serial.println("");
+  Serial.println("ABOUT TO FORMAT SPIFFS");
+  SPIFFS.begin();
+  SPIFFS.format();
+  SPIFFS.end();
+  Serial.println("SPIFFS FORMATTED");
+  Serial.println("");
+}
+
 void definePins()
 {
   Serial.println("Define pins");
@@ -41,8 +60,108 @@ void definePins()
 }
 
 // WIFI functions
-int findValidWifi()
+int numberOfStoredSSIDs(String filename)
 {
+  SPIFFS.begin();
+
+  int numberOfSSIDs = -1;
+  if (SPIFFS.exists(filename))
+  {
+    File f = SPIFFS.open(filename, "r");
+    if (f)
+    {
+      String s;
+      s = f.readStringUntil('\n');
+      s.trim();
+      numberOfSSIDs = s.toInt();
+      //      Serial.println(s);
+    }
+    f.close();
+  }
+  SPIFFS.end();
+  return numberOfSSIDs;
+}
+
+void loadSSIDsFromFile(int numberOfSSIDs, ssid *wifiInfo, String filename)
+{
+  SPIFFS.begin();
+
+  if (SPIFFS.exists(filename))
+  {
+    File f = SPIFFS.open(filename, "r");
+    if (f)
+    {
+      String s;
+      s = f.readStringUntil('\n');
+      s.trim();
+      for (int i = 0; i < numberOfSSIDs; i++)
+      {
+        s = f.readStringUntil('\n');
+        s.trim();
+        int firstComma = s.indexOf(",");
+        int secondComma = s.indexOf(",", firstComma + 1);
+        String ssid = s.substring(0, firstComma);
+        String pwd = s.substring(firstComma + 1, secondComma);
+        bool type = s.substring(secondComma + 1).equals("T");
+
+        wifiInfo[i].name = ssid;
+        wifiInfo[i].pwd = pwd;
+        wifiInfo[i].type = type;
+      }
+    }
+    f.close();
+  }
+  SPIFFS.end();
+}
+
+void saveSSIDsInFile(int numberOfSSIDs, ssid *wifiInfo, String filename)
+{
+  SPIFFS.begin();
+  File f = SPIFFS.open(filename, "w+");
+  if (f)
+  {
+    f.println(String(numberOfSSIDs));
+
+    for (int i = 0; i < numberOfSSIDs; i++)
+      f.println(printEntry(wifiInfo[i]));
+  }
+  f.close();
+  SPIFFS.end();
+
+//  debugPrintSSIDsInFile(filename);
+}
+
+void debugPrintSSIDsInFile(String filename)
+{
+  int number =  numberOfStoredSSIDs(filename);
+  ssid existing[20];
+  loadSSIDsFromFile(number, existing, filename);
+  Serial.println();
+  Serial.println("SSIDs in " + filename);
+//  for(int i=0; i< number; i++)
+//     printEntry(existing[i]);
+}
+
+String printEntry(ssid entry)
+{
+  String s = entry.name + "," + entry.pwd + ",";
+  s += entry.type ? "T" : "F";
+//  Serial.println(s);
+  return s;
+}
+ssid findValidWifi(String filename)
+{
+  ssid storedOptions[20];
+  int numberOfStoredOptions;
+
+  numberOfStoredOptions = numberOfStoredSSIDs(filename);
+
+  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, filename);
+
+  Serial.println("SSIDs in " + filename);
+//  for (int i = 0; i < numberOfStoredOptions; i++)
+//    printEntry(storedOptions[i]);
+
   Serial.println("Finding valid Wifi");
 
   int nbVisibleNetworks = 0;
@@ -61,43 +180,40 @@ int findValidWifi()
   int attempts = 20;
   int i = 0;
   int j;
+  ssid correctOne = {name : "", pwd : "", type : false};
   while (foundValidWifi == false && attempts > 0)
   {
     String candidate_ssid = WiFi.SSID(i);
     Serial.print("Checking ");
     Serial.println(candidate_ssid);
-    for (j = 0; j < sizeof(WIFIS); j++)
+    for (j = 0; j < numberOfStoredOptions; j++)
     {
-      if (WIFIS[j].equals(candidate_ssid))
+      if (storedOptions[j].name.equals(candidate_ssid))
       {
         Serial.print("THIS IS IT: ");
         foundValidWifi = true;
+        correctOne = storedOptions[j];
         break;
       }
     }
 
-    if (foundValidWifi == true)
-      break;
-    i = i + 1;
+    i++;
     attempts--;
+    if (foundValidWifi || attempts == 0)
+      return correctOne;
   }
-  Serial.println(WIFIS[j]);
-  if (attempts > 0)
-    return j;
-  else
-    return -1;
 }
 
-void connectToWifi(int index)
+void connectToWifi(ssid wifiData)
 {
   Serial.println("Connecting to selected wifi");
 
-  WiFi.begin(WIFIS[index], PWDS[index]);
+  WiFi.begin(wifiData.name, wifiData.pwd);
 
   //IP Handling
   IPAddress local_IP(192, 168, 1, 23);
   IPAddress gateway(192, 168, 1, 1);
-  if (TYPE[index] == "phone")
+  if (wifiData.type)
   {
     IPAddress local_IP(192, 168, 43, 23);
     IPAddress gateway(192, 168, 43, 150);
@@ -122,9 +238,9 @@ void connectToWifi(int index)
   Serial.print("MAC: ");
   Serial.println(WiFi.macAddress());
 }
-
 void initializeAsAP()
 {
+  digitalWrite(BUILTIN_LED, HIGH);
   Serial.print("Setting soft-AP configuration ... ");
   Serial.println(WiFi.softAPConfig(IPAddress(192, 168, 1, 23), IPAddress(192, 168, 1, 23), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
   Serial.print("Setting soft-AP ... ");
@@ -132,7 +248,6 @@ void initializeAsAP()
   Serial.print("Soft-AP IP address = ");
   Serial.println(WiFi.softAPIP());
 }
-
 void establishDDNS()
 {
   Serial.println("Establishing DynDNS");
@@ -145,7 +260,6 @@ void establishDDNS()
   });
   Serial.println("DynDNS " + dyndns + " is up and running");
 }
-
 void establishmDNS()
 {
   String mDNSname = "semaforito";
@@ -174,150 +288,72 @@ void initialiseWebServer()
   Serial.println("Webserver is up and running");
   return;
 }
+
 String getAdminHTML()
 {
   String htmlCode;
-  String storedSSIDsInHTML="";
-  int numberOfStoredWifis = sizeof(WIFIS) / sizeof(char *);
-  Serial.print("sizeofWIFIS:");
-  Serial.println(sizeof(WIFIS));
+  String storedSSIDsInHTML = "";
+  int numberOfStoredOptions;
+  ssid storedOptions[20];
+  numberOfStoredOptions = numberOfStoredSSIDs(SSIDS_FILE);
+  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, SSIDS_FILE);
 
-  Serial.print("sizeofCHAR");
-  Serial.println(sizeof(char *));
-
-  Serial.print("WIFIS array entries:");
-  Serial.println(numberOfStoredWifis);
-  
-  for(int i=0; i<numberOfStoredWifis; i++)
+  for (int i = 0; i < numberOfStoredOptions; i++)
   {
-  storedSSIDsInHTML+=""
-"    <tr>"
-"     <td><input type='text' class='ssid' name='ssid_"+String(i+1)+"' value='"+WIFIS[i]+"'/></td>"
-"     <td><input type='text' class='pwd' name='pwd_"+String(i+1)+"' value='"+PWDS[i]+"'/></td>"
-"    </tr>";
+    String standard_checked = storedOptions[i].type ? "" : "checked";
+    String phone_checked = storedOptions[i].type ? "checked" : "";
+    String n = String(i + 1);
+    storedSSIDsInHTML += ""
+                         "  <tr id='container_" + n + "'>"
+                         "     <td><input type='text' class='ssid' name='ssid_" + n + "' value='" + storedOptions[i].name + "'/></td>"
+                         "     <td><input type='password' class='pwd' name='pwd_" + n + "' value='" + storedOptions[i].pwd + "'/></td>" +
+                         "     <td><input class='type' type='radio'  name='type_" + n + "' value='standard' " + standard_checked + "><label>Standard</label></input><br>" +
+                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>"
+                         "  </tr>";
   }
 
-  htmlCode = R"rawliteral(
-             <html>
-   <title>[ADMIN] Semaforo de Reunion 2.0 </title>
-   <head>
-   <script>
-     function addNew(){
-       let table=document.getElementById('ssids');
-       let index=table.rows.length-2;
-       var row = table.insertRow(index);
+  SPIFFS.begin();
+  if (SPIFFS.exists(ADMIN_HTML_FILE))
+  {
+    File f = SPIFFS.open(ADMIN_HTML_FILE, "r");
+    while (f && f.available())
+    {
+      htmlCode += f.readStringUntil('\n');
+    }
+    htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
+    f.close();
+  }
+  SPIFFS.end();
 
-      var cell1 = row.insertCell(0);
-      var cell2 = row.insertCell(1);
-
-      // Add some text to the new cells:
-      cell1.innerHTML = `<input class='ssid' type='text' name='ssid_${index}' placeholder='SSID'/>`;
-      cell2.innerHTML = `<input class='pwd' type='text'  name='pwd_${index}' placeholder='Pwd'/>`;
-     }
-   </script>
-   </head>
-<!--   <body onload=sendJSCall('"+currentColor+"')> -->
-  <body> 
-  <h1 id='title'>Administration page</h1>
-  <form action='/ADMIN_SUBMIT' method='POST'>
-  <table id='ssids' style='border:0px'>
-    <tr>
-      <th>SSID</th>
-      <th>Password</th>
-    </tr>)rawliteral" +
-    storedSSIDsInHTML
-+R"rawliteral(
-      <tr>
-        <td colspan=2 style='text-align:center'>
-        <button type='button' id='status-button' onclick='addNew()' style='width:100%; height:40px; margin-top:20px'>Añadir otro SSID</button>
-        </td>
-      </tr>
-    <tr>
-      <td colspan=2 style='text-align:center'>
-        <button id='status-button' type='submit' style='width:150px; height:70px; margin-top:30px'>Guardar</button>
-      </td>
-    </table>
-  </form>
-</body>
-</html>)rawliteral";
-
-
+  //  Serial.println(htmlCode);
   return htmlCode;
 }
 
 String getProperHTML()
 {
-  String htmlCode;
+  String htmlCode = "";
   String currentColor = "red";
-  if (semaforoAbierto)
-    currentColor = "green";
 
   if (!semaforoEncendido)
     currentColor = "off";
+  else if (semaforoAbierto)
+    currentColor = "green";
 
-  htmlCode = R"rawliteral(
-             <html>
-                <title>Semaforo de Reunion 2.0 </title>
-                <head>
-                <script>
-                function sendJSCall(mode){
-                    modes=[
-                      {mode:'green', bg:'green', title:'Abierto', message:'El acceso esta permitido', button:'Cerrar semaforo', disablebutton:false, onoffButton:'Apagar', light:'lime'},
-                      {mode:'amber', bg:'orange', title:'Procesando...', message:'...', button:'Procesando...', disablebutton:true, onoffButton:'Apagar', light:'gold'},
-                      {mode:'red', bg:'tomato', title:'Cerrado', message:'El acceso esta restringido', button:'Abrir semaforo', disablebutton:false, onoffButton:'Apagar', light:'red'},
-                  {mode:'off', bg:'#73828a', title:'OFF', message:'El semaforo esta apagado',button:'Desactivado', disablebutton:true, onoffButton:'Encender', light:''}
-                    ];
-                 console.log(document.readyState);
-                  mode=modes.filter(e => e.mode == mode)[0];
-                  document.title = '[' + mode.title + '] Semaforo de Reunion 2.0';
-                  document.body.style.backgroundColor = mode.bg;
-                  document.getElementById('title').innerHTML = mode.title;
-                  document.getElementById('message').innerHTML = mode.message;
-                  document.getElementById('status-button').disabled = mode.disablebutton;
-                  document.getElementById('status-button').value = mode.button;
-                  document.getElementById('on-off-button').value = mode.onoffButton;
-                  modes.map(elems => elems.mode).filter(e => e != 'off').forEach( light => {
-                                  document.querySelector('#'+light).style.fill = light===mode.mode ? mode.light : 'white'; 
-                  });
-             
-                console.log(mode);
-                }
-                </script>
-             
-                </head>
-                <body onload=sendJSCall(')rawliteral" + currentColor + R"rawliteral(')> 
-                <!-- <body onload=sendJSCall('red')> -->
-                     <h1 id='title' style='color:white'></h1>
-                      <div id='message' style='color:white'></div>
-                      <div style='height:300px; position:absolute; top:10px; left:300px'>
-                       <svg xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' width='178pt' height='299pt' viewBox='0 0 178 299' version='1.1'>
-                       <g id='surface1'>
-                       <path style='stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 73.851562 0.105469 L 104.101562 0.105469 C 119.644531 0.105469 132.246094 12.691406 132.246094 28.21875 L 132.246094 161.167969 C 132.246094 176.695312 119.644531 189.28125 104.101562 189.28125 L 73.851562 189.28125 C 58.308594 189.28125 45.710938 176.695312 45.710938 161.167969 L 45.710938 28.21875 C 45.710938 12.691406 58.308594 0.105469 73.851562 0.105469 Z M 73.851562 0.105469 '/>
-                       <path id='red'   style=' stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;' d='M 115.773438 151.488281 C 115.773438 166.25 103.792969 178.21875 89.011719 178.21875 C 74.230469 178.21875 62.25 166.25 62.25 151.488281 C 62.25 136.722656 74.230469 124.753906 89.011719 124.753906 C 103.792969 124.753906 115.773438 136.722656 115.773438 151.488281 Z M 115.773438 151.488281 '/>
-                       <path id='amber' style=' stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;' d='M 115.773438 94.695312 C 115.773438 109.457031 103.792969 121.425781 89.011719 121.425781 C 74.230469 121.425781 62.25 109.457031 62.25 94.695312 C 62.25 79.929688 74.230469 67.960938 89.011719 67.960938 C 103.792969 67.960938 115.773438 79.929688 115.773438 94.695312 Z M 115.773438 94.695312 '/>
-                       <path id='green' style=' stroke:none;fill-rule:nonzero;fill:rgb(100%,100%,100%);fill-opacity:1;' d='M 115.773438 37.898438 C 115.773438 52.664062 103.792969 64.632812 89.011719 64.632812 C 74.230469 64.632812 62.25 52.664062 62.25 37.898438 C 62.25 23.136719 74.230469 11.167969 89.011719 11.167969 C 103.792969 11.167969 115.773438 23.136719 115.773438 37.898438 Z M 115.773438 37.898438 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 31.3125 175.207031 C 30.390625 174.839844 22.761719 165.171875 14.273438 153.75 C 0.121094 134.5625 -0.921875 132.714844 0.429688 129.640625 C 1.90625 126.347656 2.089844 127.355469 18.824219 127.355469 L 38.941406 127.355469 L 38.941406 151.425781 C 38.941406 171.695312 38.695312 173.316406 36.359375 174.710938 C 34.265625 175.976562 33.40625 176.039062 31.3125 175.207031 Z M 31.3125 175.207031 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 31.3125 118.414062 C 30.390625 118.046875 22.761719 108.378906 14.273438 96.953125 C 0.121094 77.769531 -0.921875 75.925781 0.429688 72.847656 C 1.90625 69.554688 2.089844 70.566406 18.824219 70.566406 L 38.941406 70.566406 L 38.941406 94.632812 C 38.941406 114.898438 38.695312 116.523438 36.359375 117.917969 C 34.265625 119.183594 33.40625 119.242188 31.3125 118.414062 Z M 31.3125 118.414062 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 31.3125 61.621094 C 30.390625 61.25 22.761719 51.585938 14.273438 40.160156 C 0.121094 20.976562 -0.921875 19.132812 0.429688 16.054688 C 1.90625 12.757812 2.089844 13.773438 18.824219 13.773438 L 38.941406 13.773438 L 38.941406 37.84375 C 38.941406 58.105469 38.695312 59.726562 36.359375 61.121094 C 34.265625 62.386719 33.40625 62.449219 31.3125 61.621094 Z M 31.3125 61.621094 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 146.65625 175.203125 C 147.570312 174.832031 155.230469 165.171875 163.671875 153.742188 C 177.851562 134.5625 178.910156 132.714844 177.539062 129.636719 C 176.066406 126.339844 175.851562 127.355469 159.132812 127.355469 L 139.042969 127.355469 L 139.042969 151.425781 C 139.042969 171.695312 139.296875 173.316406 141.597656 174.710938 C 143.675781 175.96875 144.585938 176.039062 146.65625 175.203125 Z M 146.65625 175.203125 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 146.65625 118.40625 C 147.570312 118.039062 155.230469 108.378906 163.671875 96.949219 C 177.851562 77.769531 178.910156 75.917969 177.539062 72.839844 C 176.066406 69.554688 175.851562 70.5625 159.132812 70.5625 L 139.042969 70.5625 L 139.042969 94.632812 C 139.042969 114.898438 139.296875 116.523438 141.597656 117.917969 C 143.675781 119.175781 144.585938 119.242188 146.65625 118.40625 Z M 146.65625 118.40625 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 146.65625 61.621094 C 147.570312 61.246094 155.230469 51.585938 163.671875 40.15625 C 177.851562 20.976562 178.910156 19.125 177.539062 16.046875 C 176.066406 12.757812 175.851562 13.765625 159.132812 13.765625 L 139.042969 13.765625 L 139.042969 37.835938 C 139.042969 58.105469 139.296875 59.726562 141.597656 61.121094 C 143.675781 62.382812 144.585938 62.449219 146.65625 61.621094 Z M 146.65625 61.621094 '/>
-                       <path style=' stroke:none;fill-rule:nonzero;fill:rgb(0%,0%,0%);fill-opacity:1;' d='M 72.613281 196.003906 L 105.324219 196.003906 C 109.546875 196.003906 112.972656 199.421875 112.972656 203.640625 L 112.972656 291.257812 C 112.972656 295.472656 109.546875 298.894531 105.324219 298.894531 L 72.613281 298.894531 C 68.390625 298.894531 64.964844 295.472656 64.964844 291.257812 L 64.964844 203.640625 C 64.964844 199.421875 68.390625 196.003906 72.613281 196.003906 Z M 72.613281 196.003906 '/>
-                       </g>
-                       </svg>
-                     </div>
-                     <div style='padding-top:30px; text-align:center; width:280px'>
-                         <form action='/CHANGESTATUS' method='POST' onsubmit='sendJSCall(\"amber\")'>
-                           <input id='status-button' type='submit' value='' style='width:250px; height:150px'>
-                         </form>
-                         <br>
-                         <form action='/TURNONANDOFF' method='POST' onsubmit='sendJSCall(\"amber\")'>
-                           <input id='on-off-button' type='submit' value='Apagar' style='width:150px; height:40px; margin-top:30px'>
-                         </form>
-                         </div>
-                       </body>
-                    </html>  )rawliteral";
+  SPIFFS.begin();
 
+  if (SPIFFS.exists(SEMAFORO_HTML_FILE))
+  {
+    File f = SPIFFS.open(SEMAFORO_HTML_FILE, "r");
+    while (f && f.available())
+    {
+      htmlCode += f.readStringUntil('\n');
+    }
+    htmlCode.replace("{{color}}", currentColor);
+    f.close();
+  }
+  SPIFFS.end();
+
+  //  Serial.println(htmlCode);
   return htmlCode;
 }
 
@@ -326,23 +362,6 @@ void rootPage()
   Serial.println("new connection");
   webserver.send(200, "text/html", getProperHTML());
 }
-
-void processEntries()
-{
-  Serial.print('Webserver has arguments? ');
-  Serial.println(webserver.hasArg("plain"));
-
-  String message = "Body received:\n";
-             message += webserver.arg("plain");
-             message += "\n";
- 
-  Serial.println(message);
-
-  webserver.sendHeader("Location", "/ADMIN"); // Add a header to respond with a new location for the browser to go to the home page again
-  webserver.send(303);
-  Serial.println("Webserver relocation sent");
-}
-
 void handleTrafficLightStatus()
 {
   sendJSCall("Processing");
@@ -365,7 +384,6 @@ void handleTrafficLightStatus()
   webserver.send(303);
   Serial.println("Webserver relocation sent");
 }
-
 void handleTrafficLightOnAndOff()
 {
   sendJSCall("Processing");
@@ -391,10 +409,46 @@ void handleTrafficLightOnAndOff()
 
 void adminPage()
 {
+  Serial.println("new admin connection");
   webserver.send(200, "text/html", getAdminHTML());
 }
 
-// Handle 404
+void processEntries()
+{
+  
+  String ssidsRaw = webserver.arg("plain");
+  Serial.println("POST As string:");
+  Serial.println(ssidsRaw);
+
+  Serial.println("");
+  DynamicJsonDocument doc(1024);
+
+  auto error = deserializeJson(doc, ssidsRaw);
+
+  if (error)
+  {
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    return;
+  }
+//  serializeJsonPretty(doc, Serial);
+
+  ssid ssidsToStore[doc.size()];
+  for (int i = 0; i < doc.size(); i++)
+  {
+    //    Serial.println(doc[i]["ssid"].as<String>());
+    ssidsToStore[i].name = doc[i]["ssid"].as<String>();
+    ssidsToStore[i].pwd = doc[i]["pwd"].as<String>();
+    ssidsToStore[i].type = doc[i]["type"];
+//    printEntry(ssidsToStore[i]);
+  }
+
+  saveSSIDsInFile(doc.size(), ssidsToStore, SSIDS_FILE);
+
+  webserver.sendHeader("Location", "/ADMIN"); // Add a header to respond with a new location for the browser to go to the home page again
+  webserver.send(303);
+  Serial.println("Webserver relocation sent");
+}
 void notfoundPage()
 {
   webserver.send(404, "text/plain", "404: Not found");
@@ -404,8 +458,8 @@ void sendJSCall(String call)
 {
   Serial.println(call);
 }
-// TRAFFIC LIGHT functions
 
+// TRAFFIC LIGHT functions
 // Traffic light logic
 void cerrarSemaforo(int ambar_wait)
 {
@@ -414,7 +468,6 @@ void cerrarSemaforo(int ambar_wait)
   transition(red, yellow, green);
   establishColor(red);
 }
-
 void abrirSemaforo(int ambar_wait)
 {
   transition(yellow, red, green);
@@ -422,7 +475,6 @@ void abrirSemaforo(int ambar_wait)
   transition(green, yellow, red);
   establishColor(green);
 }
-
 void sequentialDemo()
 {
   int sequential_delay = 300;
@@ -438,20 +490,17 @@ void sequentialDemo()
   delay(sequential_delay);
   establishColor(green);
 }
-
 void setTrafficLightAsLoading()
 {
   establishColor(yellow);
   return;
 }
-
 void initialiseTrafficLight()
 {
   sequentialDemo();
   establishColor(green);
   return;
 }
-
 void transition(int high, int mid, int low)
 {
   analogWrite(mid, 500);
@@ -459,7 +508,6 @@ void transition(int high, int mid, int low)
   analogWrite(low, 0);
   return;
 }
-
 void establishColor(int color)
 {
   int colors[] = {green, yellow, red};
@@ -481,7 +529,6 @@ void all(int value)
     analogWrite(colors[i], value);
   }
 }
-
 void turnTrafficLightOff()
 {
   int dim = 1023;
@@ -490,28 +537,32 @@ void turnTrafficLightOff()
     all(dim);
     delay(AMBAR_TIME);
   }
+  all(0);
 }
 
 void setup()
 {
   Serial.begin(115200);
+  WiFi.mode(WIFI_STA);
+
+  //  resetSPIFFS();
   definePins();
   setTrafficLightAsLoading();
 
-  int index = findValidWifi();
+  ssid validWifi = findValidWifi(SSIDS_FILE);
 
-  if (index > 0)
+  if (validWifi.name != "")
   {
-    connectToWifi(index);
+    connectToWifi(validWifi);
     establishDDNS();
   }
   else
   {
+    // BE AP
     initializeAsAP();
-    /* BE AP */
   }
 
-  establishmDNS();
+  // establishmDNS();
   initialiseWebServer();
   initialiseTrafficLight();
 }
