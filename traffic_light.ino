@@ -6,9 +6,11 @@
 #include <ArduinoJson.h>
 
 String SSIDS_FILE = "/good_ssids.txt";
+String SETTINGS_FILE = "/settings.txt";
 
 String SEMAFORO_HTML_FILE = "/semaforoPage.html";
-String ADMIN_HTML_FILE = "/adminPage.html";
+String SSID_SETTINGS_HTML_FILE = "/ssidSettingsPage.html";
+String SETTINGS_HTML_FILE = "/settingsPage.html";
 
 struct ssid
 {
@@ -29,12 +31,33 @@ const int green = d6;
 const int yellow = d5;
 const int red = d0;
 int colors[] = {green, yellow, red};
-
 const int GND = d7;
-
-const int AMBAR_TIME = 3;
 boolean semaforoAbierto = true;
 boolean semaforoEncendido = true;
+
+int AMBER_TIME = 3;
+boolean AMBER = true;
+boolean RED_TO_GREEN = true;
+boolean GREEN_TO_RED = true;
+String AP_NAME = "semaforito";
+String DEFAULT_IP = "192.168.1.23";
+String PHONE_IP = "192.168.43.23";
+String AP_IP = "192.168.1.23";
+
+int *convertToIp(String ip)
+{
+  int firstSplit = ip.indexOf(".");
+  int secondSplit = ip.indexOf(".", firstSplit + 1);
+  int thirdSplit = ip.indexOf(".", secondSplit + 1);
+  int first = ip.substring(0, firstSplit).toInt();
+  int second = ip.substring(firstSplit + 1, secondSplit).toInt();
+  int third = ip.substring(secondSplit + 1, thirdSplit).toInt();
+  int fourth = ip.substring(thirdSplit + 1).toInt();
+
+  Serial.println(String(first) + "." + String(second) + "." + String(third) + "." + String(fourth));
+  int arr[4] = {first, second, third, fourth};
+  return arr;
+}
 
 void resetSPIFFS()
 {
@@ -57,6 +80,38 @@ void definePins()
   digitalWrite(GND, LOW);
   digitalWrite(BUILTIN_LED, HIGH);
   return;
+}
+
+void loadSettings(String filename)
+{
+  SPIFFS.begin();
+  int numberOfSSIDs = -1;
+  String s;
+
+  if (SPIFFS.exists(filename))
+  {
+    File f = SPIFFS.open(filename, "r");
+    if (f)
+    {
+      while (f.available())
+      {
+        s += f.readStringUntil('\n');
+      }
+    }
+    f.close();
+  }
+  SPIFFS.end();
+  DynamicJsonDocument doc(1024);
+  auto error = deserializeJson(doc, s);
+
+  AMBER_TIME = doc["transition_speed"];
+  AMBER = doc["amber_transition"];
+  RED_TO_GREEN = doc["red_to_green"];
+  GREEN_TO_RED = doc["green_to_red"];
+  AP_NAME = doc["ap_name"].as<String>();
+  DEFAULT_IP = doc["default_ip"].as<String>();
+  PHONE_IP = doc["phone_ip"].as<String>();
+  AP_IP = doc["ap_ip"].as<String>();
 }
 
 // WIFI functions
@@ -128,25 +183,25 @@ void saveSSIDsInFile(int numberOfSSIDs, ssid *wifiInfo, String filename)
   f.close();
   SPIFFS.end();
 
-//  debugPrintSSIDsInFile(filename);
+  //  debugPrintSSIDsInFile(filename);
 }
 
 void debugPrintSSIDsInFile(String filename)
 {
-  int number =  numberOfStoredSSIDs(filename);
+  int number = numberOfStoredSSIDs(filename);
   ssid existing[20];
   loadSSIDsFromFile(number, existing, filename);
   Serial.println();
   Serial.println("SSIDs in " + filename);
-//  for(int i=0; i< number; i++)
-//     printEntry(existing[i]);
+  //  for(int i=0; i< number; i++)
+  //     printEntry(existing[i]);
 }
 
 String printEntry(ssid entry)
 {
   String s = entry.name + "," + entry.pwd + ",";
   s += entry.type ? "T" : "F";
-//  Serial.println(s);
+  //  Serial.println(s);
   return s;
 }
 ssid findValidWifi(String filename)
@@ -159,8 +214,8 @@ ssid findValidWifi(String filename)
   loadSSIDsFromFile(numberOfStoredOptions, storedOptions, filename);
 
   Serial.println("SSIDs in " + filename);
-//  for (int i = 0; i < numberOfStoredOptions; i++)
-//    printEntry(storedOptions[i]);
+  //  for (int i = 0; i < numberOfStoredOptions; i++)
+  //    printEntry(storedOptions[i]);
 
   Serial.println("Finding valid Wifi");
 
@@ -206,16 +261,20 @@ ssid findValidWifi(String filename)
 
 void connectToWifi(ssid wifiData)
 {
+  int *ip;
+
   Serial.println("Connecting to selected wifi");
 
   WiFi.begin(wifiData.name, wifiData.pwd);
 
   //IP Handling
-  IPAddress local_IP(192, 168, 1, 23);
+  ip = convertToIp(DEFAULT_IP);
+  IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
   IPAddress gateway(192, 168, 1, 1);
   if (wifiData.type)
   {
-    IPAddress local_IP(192, 168, 43, 23);
+    ip = convertToIp(PHONE_IP);
+    IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
     IPAddress gateway(192, 168, 43, 150);
   }
 
@@ -240,11 +299,13 @@ void connectToWifi(ssid wifiData)
 }
 void initializeAsAP()
 {
+  int *ip;
   digitalWrite(BUILTIN_LED, HIGH);
   Serial.print("Setting soft-AP configuration ... ");
-  Serial.println(WiFi.softAPConfig(IPAddress(192, 168, 1, 23), IPAddress(192, 168, 1, 23), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
+  ip = convertToIp(DEFAULT_IP);
+  Serial.println(WiFi.softAPConfig(IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
   Serial.print("Setting soft-AP ... ");
-  Serial.println(WiFi.softAP("Semaforito_AP") ? "Ready" : "Failed!");
+  Serial.println(WiFi.softAP(AP_NAME + "_AP") ? "Ready" : "Failed!");
   Serial.print("Soft-AP IP address = ");
   Serial.println(WiFi.softAPIP());
 }
@@ -281,55 +342,17 @@ void initialiseWebServer()
   webserver.on("/", HTTP_GET, rootPage);
   webserver.on("/CHANGESTATUS", HTTP_POST, handleTrafficLightStatus);
   webserver.on("/TURNONANDOFF", HTTP_POST, handleTrafficLightOnAndOff);
-  webserver.on("/ADMIN", HTTP_GET, adminPage);
-  webserver.on("/ADMIN_SUBMIT", HTTP_POST, processEntries);
+  webserver.on("/SETTINGS", HTTP_GET, settingsPage);
+  webserver.on("/SETTINGS_SUBMIT", HTTP_POST, settingsPage);
+  webserver.on("/SSID_SETTINGS", HTTP_GET, ssidSettingsPage);
+  webserver.on("/SSID_SETTINGS_SUBMIT", HTTP_POST, processSSIDS);
   webserver.onNotFound(notfoundPage);
   webserver.begin();
   Serial.println("Webserver is up and running");
   return;
 }
 
-String getAdminHTML()
-{
-  String htmlCode;
-  String storedSSIDsInHTML = "";
-  int numberOfStoredOptions;
-  ssid storedOptions[20];
-  numberOfStoredOptions = numberOfStoredSSIDs(SSIDS_FILE);
-  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, SSIDS_FILE);
-
-  for (int i = 0; i < numberOfStoredOptions; i++)
-  {
-    String standard_checked = storedOptions[i].type ? "" : "checked";
-    String phone_checked = storedOptions[i].type ? "checked" : "";
-    String n = String(i + 1);
-    storedSSIDsInHTML += ""
-                         "  <tr id='container_" + n + "'>"
-                         "     <td><input type='text' class='ssid' name='ssid_" + n + "' value='" + storedOptions[i].name + "'/></td>"
-                         "     <td><input type='password' class='pwd' name='pwd_" + n + "' value='" + storedOptions[i].pwd + "'/></td>" +
-                         "     <td><input class='type' type='radio'  name='type_" + n + "' value='standard' " + standard_checked + "><label>Standard</label></input><br>" +
-                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>"
-                         "  </tr>";
-  }
-
-  SPIFFS.begin();
-  if (SPIFFS.exists(ADMIN_HTML_FILE))
-  {
-    File f = SPIFFS.open(ADMIN_HTML_FILE, "r");
-    while (f && f.available())
-    {
-      htmlCode += f.readStringUntil('\n');
-    }
-    htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
-    f.close();
-  }
-  SPIFFS.end();
-
-  //  Serial.println(htmlCode);
-  return htmlCode;
-}
-
-String getProperHTML()
+String getTrafficLightHTML()
 {
   String htmlCode = "";
   String currentColor = "red";
@@ -356,11 +379,80 @@ String getProperHTML()
   //  Serial.println(htmlCode);
   return htmlCode;
 }
+String getSSIDSettingsHTML()
+{
+  String htmlCode;
+  String storedSSIDsInHTML = "";
+  int numberOfStoredOptions;
+  ssid storedOptions[20];
+  numberOfStoredOptions = numberOfStoredSSIDs(SSIDS_FILE);
+  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, SSIDS_FILE);
+
+  for (int i = 0; i < numberOfStoredOptions; i++)
+  {
+    String standard_checked = storedOptions[i].type ? "" : "checked";
+    String phone_checked = storedOptions[i].type ? "checked" : "";
+    String n = String(i + 1);
+    storedSSIDsInHTML += ""
+                         "  <tr id='container_" +
+                         n + "'>"
+                             "     <td><input type='text' class='ssid' name='ssid_" +
+                         n + "' value='" + storedOptions[i].name + "'/></td>"
+                                                                   "     <td><input type='password' class='pwd' name='pwd_" +
+                         n + "' value='" + storedOptions[i].pwd + "'/></td>" +
+                         "     <td><input class='type' type='radio'  name='type_" + n + "' value='standard' " + standard_checked + "><label>Standard</label></input><br>" +
+                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>"
+                                                                                                                                "  </tr>";
+  }
+
+  SPIFFS.begin();
+  if (SPIFFS.exists(SSID_SETTINGS_HTML_FILE))
+  {
+    File f = SPIFFS.open(SSID_SETTINGS_HTML_FILE, "r");
+    while (f && f.available())
+    {
+      htmlCode += f.readStringUntil('\n');
+    }
+    htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
+    f.close();
+  }
+  SPIFFS.end();
+
+  //  Serial.println(htmlCode);
+  return htmlCode;
+}
+String getGeneralSettingsHTML()
+{
+  String htmlCode;
+
+  SPIFFS.begin();
+  if (SPIFFS.exists(SSID_SETTINGS_HTML_FILE))
+  {
+    File f = SPIFFS.open(SSID_SETTINGS_HTML_FILE, "r");
+    while (f && f.available())
+    {
+      htmlCode += f.readStringUntil('\n');
+    }
+    htmlCode.replace("{{speed_value}}", String(AMBER_TIME));
+    htmlCode.replace("{{amber}}", AMBER ? "checked" : "");
+    htmlCode.replace("{{red_to_green}}", RED_TO_GREEN ? "checked" : "");
+    htmlCode.replace("{{green_to_red}}", GREEN_TO_RED ? "checked" : "");
+    htmlCode.replace("{{standard_ip}}", DEFAULT_IP);
+    htmlCode.replace("{{phone_ip}}", PHONE_IP);
+    htmlCode.replace("{{ap_ip}}", AP_IP);
+    htmlCode.replace("{{ap_name}}", AP_NAME);
+    f.close();
+  }
+  SPIFFS.end();
+
+  //  Serial.println(htmlCode);
+  return htmlCode;
+}
 
 void rootPage()
 {
   Serial.println("new connection");
-  webserver.send(200, "text/html", getProperHTML());
+  webserver.send(200, "text/html", getTrafficLightHTML());
 }
 void handleTrafficLightStatus()
 {
@@ -368,14 +460,14 @@ void handleTrafficLightStatus()
   if (semaforoAbierto)
   {
     Serial.println("Cerrando semaforo");
-    cerrarSemaforo(AMBAR_TIME);
+    cerrarSemaforo(AMBER_TIME);
     semaforoAbierto = false;
     sendJSCall("Cerrado");
   }
   else
   {
     Serial.println("Abriendo semaforo");
-    abrirSemaforo(AMBAR_TIME);
+    abrirSemaforo(AMBER_TIME);
     semaforoAbierto = true;
     sendJSCall("Abierto");
   }
@@ -407,20 +499,26 @@ void handleTrafficLightOnAndOff()
   Serial.println("Webserver relocation sent");
 }
 
-void adminPage()
+void ssidSettingsPage()
 {
-  Serial.println("new admin connection");
-  webserver.send(200, "text/html", getAdminHTML());
+  Serial.println("new ssid settings connection");
+  webserver.send(200, "text/html", getSSIDSettingsHTML());
 }
 
-void processEntries()
+void settingsPage()
 {
-  
-  String ssidsRaw = webserver.arg("plain");
-  Serial.println("POST As string:");
-  Serial.println(ssidsRaw);
+  Serial.println("new general settings connection");
+  webserver.send(200, "text/html", getGeneralSettingsHTML());
+}
 
-  Serial.println("");
+void processSSIDS()
+{
+
+  String ssidsRaw = webserver.arg("plain");
+  // Serial.println("POST As string:");
+  // Serial.println(ssidsRaw);
+
+  // Serial.println("");
   DynamicJsonDocument doc(1024);
 
   auto error = deserializeJson(doc, ssidsRaw);
@@ -431,7 +529,7 @@ void processEntries()
     Serial.println(error.c_str());
     return;
   }
-//  serializeJsonPretty(doc, Serial);
+  //  serializeJsonPretty(doc, Serial);
 
   ssid ssidsToStore[doc.size()];
   for (int i = 0; i < doc.size(); i++)
@@ -440,12 +538,12 @@ void processEntries()
     ssidsToStore[i].name = doc[i]["ssid"].as<String>();
     ssidsToStore[i].pwd = doc[i]["pwd"].as<String>();
     ssidsToStore[i].type = doc[i]["type"];
-//    printEntry(ssidsToStore[i]);
+    //    printEntry(ssidsToStore[i]);
   }
 
   saveSSIDsInFile(doc.size(), ssidsToStore, SSIDS_FILE);
 
-  webserver.sendHeader("Location", "/ADMIN"); // Add a header to respond with a new location for the browser to go to the home page again
+  webserver.sendHeader("Location", "/SSID_SETTINGS");
   webserver.send(303);
   Serial.println("Webserver relocation sent");
 }
@@ -463,16 +561,22 @@ void sendJSCall(String call)
 // Traffic light logic
 void cerrarSemaforo(int ambar_wait)
 {
-  transition(yellow, green, red);
-  delay(ambar_wait * 1000);
-  transition(red, yellow, green);
+  if (AMBER && GREEN_TO_RED)
+  {
+    transition(yellow, green, red);
+    delay(ambar_wait * 1000);
+    transition(red, yellow, green);
+  }
   establishColor(red);
 }
 void abrirSemaforo(int ambar_wait)
 {
-  transition(yellow, red, green);
-  delay(ambar_wait * 1000);
-  transition(green, yellow, red);
+  if (AMBER && RED_TO_GREEN)
+  {
+    transition(yellow, red, green);
+    delay(ambar_wait * 1000);
+    transition(green, yellow, red);
+  }
   establishColor(green);
 }
 void sequentialDemo()
@@ -503,7 +607,7 @@ void initialiseTrafficLight()
 }
 void transition(int high, int mid, int low)
 {
-  analogWrite(mid, 500);
+  analogWrite(mid, 300);
   analogWrite(high, 1023);
   analogWrite(low, 0);
   return;
@@ -511,8 +615,7 @@ void transition(int high, int mid, int low)
 void establishColor(int color)
 {
   int colors[] = {green, yellow, red};
-  int i = 0;
-  for (i = 0; i < 3; i++)
+  for (int i = 0; i < 3; i++)
   {
     if (color == colors[i])
       analogWrite(color, 1023);
@@ -523,19 +626,17 @@ void establishColor(int color)
 void all(int value)
 {
   int colors[] = {green, yellow, red};
-  int i;
-  for (i = 0; i < 3; i++)
+  for (int i = 0; i < 3; i++)
   {
     analogWrite(colors[i], value);
   }
 }
 void turnTrafficLightOff()
 {
-  int dim = 1023;
-  for (dim = 1023; dim > 0; dim--)
+  for (int dim = 1023; dim > 0; dim--)
   {
     all(dim);
-    delay(AMBAR_TIME);
+    delay(AMBER_TIME);
   }
   all(0);
 }
@@ -548,6 +649,8 @@ void setup()
   //  resetSPIFFS();
   definePins();
   setTrafficLightAsLoading();
+
+  loadSettings(SETTINGS_FILE);
 
   ssid validWifi = findValidWifi(SSIDS_FILE);
 

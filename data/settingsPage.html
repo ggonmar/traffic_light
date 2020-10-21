@@ -1,0 +1,171 @@
+<html>
+<title>[ADMIN] Semaforo de Reunion 2.0 </title>
+
+<head>
+  <style type="text/css">
+    input[type=radio] {
+      vertical-align: text-bottom;
+      width: 0.8em;
+    }
+
+    label {
+      font-size: 0.8em;
+      display: inline-flex;
+      text-align: right;
+      min-width:35px;
+    }
+
+    input[type=text] {
+      display: inline-block;
+      text-align: center;
+      clear: both
+    }
+    input[type=range] {
+      display: inline-block;
+      width:50%
+    }
+    td {
+      line-height: 2.5em;
+    }
+    td.text {
+      text-align: right
+    }
+  </style>
+  <script>
+    function addNew() {
+      let table = document.getElementById('ssids');
+      let index = table.rows.length - 3;
+      var row = table.insertRow(index);
+      row.id = "container_" + index;
+      // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
+      var cell1 = row.insertCell(0);
+      var cell2 = row.insertCell(1);
+      var cell3 = row.insertCell(2);
+
+      // Add some text to the new cells:
+      cell1.innerHTML = `<input class='ssid' type='text' name='ssid_${index}' placeholder='SSID'/>`;
+      cell2.innerHTML = `<input class='pwd' type='password'  name='pwd_${index}' placeholder='Pwd'/>`;
+      cell3.innerHTML = `<input class='radio' type='radio'  name='type_${index}' value="standard" checked><label>Standard</label></input><br>` +
+        `<input class='radio' type='radio'  name='type_${index}' value="phone"><label>Phone (Tether)</label></input>`;
+    }
+    function returnToTrafficLight() {
+      try {
+        fetch("/", {
+          method: "GET"
+        }).then(res => {
+          //          console.log("Request complete! response:", res);
+        }).catch(err => { });
+      } catch (e) { };
+    }
+    function prepareAndSendData() {
+      const form = document.querySelector("form");
+      let data = new FormData(form);
+      let processedData = [];
+      let numberOfElements = document.getElementsByClassName('ssid').length;
+
+      for (let i = 1; i <= numberOfElements; i++) {
+        if (data.get("ssid_" + i) === "" && document.getElementById('container_' + i))
+          document.getElementById('container_' + i).remove()
+        else {
+          processedData.push({
+            ssid: data.get("ssid_" + i),
+            pwd: data.get("pwd_" + i),
+            type: data.get("type_" + i) === "phone"
+          });
+        }
+      }
+      try {
+        fetch("/ADMIN_SUBMIT", {
+          method: "POST",
+          body: JSON.stringify(processedData)
+        }).then(res => {
+          //          console.log("Request complete! response:", res);
+        }).catch(err => { });
+      } catch (e) { };
+    }
+
+    function updateTextInput(val) {
+      document.getElementById('switch-speed-value').value = val;
+    }
+    function updateSlider(val) {
+      document.getElementById('switch-speed').value = val;
+    }
+  </script>
+</head>
+<!--   <body onload=sendJSCall('"+currentColor+"')> -->
+
+<body>
+  <h1 id='title'>Administration page</h1>
+  <form>
+    <table>
+      <tr>
+        <td>
+          <label for="switch-speed">Speed on switching</label>
+          <input type="range" id="switch-speed" value="{{speed_value}}" name="switch-speed" min="0" max="10"
+            onchange="updateTextInput(this.value);">
+          <input type="text" id="switch-speed-value" value="{{speed_value}}" onchange="updateSlider(this.value)"
+            style="width:35px">
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input type="checkbox" id="amber-alone" name="amber-alone" {{amber_alone}}>
+          <label for="amber-alone">Amber turns on with previous state: </label>
+          <br>
+          <input type="checkbox" id="amber-from-red-to-green" name="amber-from-red-to-green" {{red_to_green}}>
+          <label for="amber-from-red-to-green">When opening, transition includes amber</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input type="checkbox" id="amber-from-green-to-red" name="amber-from-green-to-red" {{green_to_red}}>
+          <label for="amber-from-green-to-red">When closing, transition includes amber</label>
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="standard-ip">IP address on standard networks</label>
+          <input type="text" id="standard-ip" name="standard-ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{standard_ip}}">
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="phone-ip">IP address on phone (tethered) networks</label>
+          <input type="text" id="phone-ip" name="phone-ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{phone_ip}}">
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="ap-ip">IP address when Access Point</label>
+          <input type="text" id="ap-ip" name="ap-ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{ap_ip}}">
+        </td>
+      </tr>
+
+      <tr>
+        <td class="text">
+          <label for="ap-name">Name of AP SSID</label>
+          <input type="text" id="ap-name" name="ap-name" value="{{ap_name}}">
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align:center">
+          <button type="button" onclick="prepareAndSendData()" id='save-all-button'
+            style='width:150px; height:70px; margin-top:30px'>Guardar</button>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align:center">
+          <button type="button" onclick="resetToDefault()" id='reset-all-button'
+            style='width:150px; height:30px; margin-top:50px'>Reset to default</button>
+        </td>
+      </tr>
+    </table>
+  </form>
+</body>
+
+</html>
