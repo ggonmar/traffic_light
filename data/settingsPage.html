@@ -13,6 +13,7 @@
       display: inline-flex;
       text-align: right;
       min-width: 35px;
+      line-height: 1.1em;
     }
 
     input[type=text] {
@@ -33,6 +34,9 @@
     td.text {
       text-align: right
     }
+    .blocks{
+      display:inline-block
+    }
   </style>
   <script>
     function prepareAndSendData() {
@@ -47,6 +51,9 @@
       processedData.phone_ip = data.get("phone_ip");
       processedData.ap_ip = data.get("ap_ip");
       processedData.ap_name = data.get("ap_name");
+      processedData.dyn_dns_url = data.get("dyn_dns_url");
+      processedData.dyn_dns_username = data.get("dyn_dns_username");
+      processedData.dyn_dns_pwd = data.get("dyn_dns_pwd");
       document.body.style.cursor = "wait";
       try {
         fetch("/SETTINGS_SUBMIT", {
@@ -133,6 +140,23 @@
           <label for="ap_name">Name of AP SSID</label>
           <input type="text" id="ap_name" name="ap_name" value="{{ap_name}}">
         </td>
+      </tr>
+
+      <tr>
+        <td>
+          <div class="blocks">
+          <label for="dyn_dns_url">DynDNS url</label><br>
+          <input type="text" id="dyn_dns_url" name="dyn_dns_url" value="{{dyn_dns_url}}">
+        </div>
+        <div class="blocks">
+          <label for="dyn_dns_username">Username</label><br>
+          <input type="text" id="dyn_dns_username" name="dyn_dns_username" value="{{dyn_dns_username}}">
+        </div>
+        <div class="blocks">
+          <label for="dyn_dns_pwd">Password</label><br>
+          <input type="password" id="dyn_dns_pwd" name="dyn_dns_pwd" value="{{dyn_dns_pwd}}">
+        </div>
+      </td>
       </tr>
 
       <tr>

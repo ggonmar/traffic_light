@@ -6,5 +6,8 @@
     "default_ip":"192.168.1.23",
     "phone_ip":"192.168.43.23",
     "ap_ip":"192.168.1.23",
-    "ap_name":"semaforito"
+    "ap_name":"semaforito",
+    "dyn_dns_url":"semaforo.myddns.me",
+    "dyn_dns_username":"ggonzalezmartin@gmail.com",
+    "dyn_dns_pwd":"PUT0noip!"
 }

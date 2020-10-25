@@ -43,6 +43,9 @@ String AP_NAME = "semaforito";
 String DEFAULT_IP = "192.168.1.23";
 String PHONE_IP = "192.168.43.23";
 String AP_IP = "192.168.1.23";
+String DYN_DNS_URL = "semaforo.myddns.me";
+String DYN_DNS_USERNAME = "ggonzalezmartin@gmail.com";
+String DYN_DNS_PWD = "foobar1";
 
 void convertToIp(String ip, int ipArray[4])
 {
@@ -114,6 +117,7 @@ void saveToFile(String filename, String settings)
     f.println(settings);
   f.close();
   SPIFFS.end();
+  Serial.println(settings);
 }
 
 void loadSettings(String filename)
@@ -131,6 +135,9 @@ void loadSettings(String filename)
   DEFAULT_IP = doc["default_ip"].as<String>();
   PHONE_IP = doc["phone_ip"].as<String>();
   AP_IP = doc["ap_ip"].as<String>();
+  DYN_DNS_URL = doc["dyn_dns_url"].as<String>();
+  DYN_DNS_USERNAME = doc["dyn_dns_username"].as<String>();
+  DYN_DNS_PWD = doc["dyn_dns_pwd"].as<String>();
 
   String str = "[loadSettings]"
                "\n\tTransition speed: " +
@@ -142,7 +149,11 @@ void loadSettings(String filename)
                "\n\tDefault IPs:" +
                "\n\t   Standard: " + DEFAULT_IP +
                "\n\t   Phone (tether): " + PHONE_IP +
-               "\n\t   AP: " + AP_IP;
+               "\n\t   AP: " + AP_IP +
+               "\n\tDynDNS:" +
+               "\n\t   URL: " + DYN_DNS_URL +
+               "\n\t   Username: " + DYN_DNS_USERNAME +
+               "\n\t   Password: " + DYN_DNS_PWD;
   Serial.println(str);
 }
 
@@ -293,14 +304,13 @@ void initializeAsAP()
 void establishDDNS()
 {
   Serial.println("[Establishing DynDNS]");
-  String dyndns = "semaforo.myddns.me";
   EasyDDNS.service("noip");
-  EasyDDNS.client(dyndns, "ggonzalezmartin@gmail.com", "PUT0noip!");
+  EasyDDNS.client(DYN_DNS_URL, DYN_DNS_USERNAME, DYN_DNS_PWD);
   EasyDDNS.onUpdate([&](const char *oldIP, const char *newIP) {
     Serial.print("EasyDDNS - IP Change Detected: ");
     Serial.println(newIP);
   });
-  Serial.println("\tDynDNS " + dyndns + " is up and running");
+  Serial.println("\tDynDNS " + DYN_DNS_URL + " is up and running");
 }
 void establishmDNS()
 {
@@ -391,6 +401,10 @@ String getGeneralSettingsHTML()
   htmlCode.replace("{{phone_ip}}", PHONE_IP);
   htmlCode.replace("{{ap_ip}}", AP_IP);
   htmlCode.replace("{{ap_name}}", AP_NAME);
+  htmlCode.replace("{{dyn_dns_url}}", DYN_DNS_URL);
+  htmlCode.replace("{{dyn_dns_username}}", DYN_DNS_USERNAME);
+  htmlCode.replace("{{dyn_dns_pwd}}", DYN_DNS_PWD);
+
 
   //  Serial.println(htmlCode);
   return htmlCode;
