@@ -1,0 +1,27 @@
+[
+    {
+        "ssid": "GD57A",
+        "pwd": "En1lug@rdelaMancha",
+        "type": false
+    },
+    {
+        "ssid": "Poliwifi",
+        "pwd": "fader1946",
+        "type": false
+    },
+    {
+        "ssid": "LaCasaDeNemo",
+        "pwd": "Olivia2017",
+        "type": false
+    },
+    {
+        "ssid": "JuanPlas",
+        "pwd": "internet",
+        "type": true
+    },
+    {
+        "ssid": "Polis8",
+        "pwd": "milepolis8",
+        "type": true
+    }
+]

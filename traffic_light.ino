@@ -5,16 +5,16 @@
 #include "FS.h"
 #include <ArduinoJson.h>
 
-String SSIDS_FILE = "/good_ssids.txt";
-String SETTINGS_FILE = "/settings.txt";
-
+String SSIDS_FILE = "/ssids.json";
+String SETTINGS_FILE = "/settings.json";
+String DEFAULT_SETTINGS_FILE = "/settings.default.json";
 String SEMAFORO_HTML_FILE = "/semaforoPage.html";
-String SSID_SETTINGS_HTML_FILE = "/ssidSettingsPage.html";
+String SSID_SETTINGS_HTML_FILE = "/ssidsSettingsPage.html";
 String SETTINGS_HTML_FILE = "/settingsPage.html";
 
 struct ssid
 {
-  String name;
+  String ssid;
   String pwd;
   bool type;
 };
@@ -36,7 +36,7 @@ boolean semaforoAbierto = true;
 boolean semaforoEncendido = true;
 
 int AMBER_TIME = 3;
-boolean AMBER = true;
+boolean AMBER_TRANSITION = true;
 boolean RED_TO_GREEN = true;
 boolean GREEN_TO_RED = true;
 String AP_NAME = "semaforito";
@@ -44,48 +44,46 @@ String DEFAULT_IP = "192.168.1.23";
 String PHONE_IP = "192.168.43.23";
 String AP_IP = "192.168.1.23";
 
-int *convertToIp(String ip)
+void convertToIp(String ip, int ipArray[4])
 {
   int firstSplit = ip.indexOf(".");
   int secondSplit = ip.indexOf(".", firstSplit + 1);
   int thirdSplit = ip.indexOf(".", secondSplit + 1);
-  int first = ip.substring(0, firstSplit).toInt();
-  int second = ip.substring(firstSplit + 1, secondSplit).toInt();
-  int third = ip.substring(secondSplit + 1, thirdSplit).toInt();
-  int fourth = ip.substring(thirdSplit + 1).toInt();
+  ipArray[0] = ip.substring(0, firstSplit).toInt();
+  ipArray[1] = ip.substring(firstSplit + 1, secondSplit).toInt();
+  ipArray[2] = ip.substring(secondSplit + 1, thirdSplit).toInt();
+  ipArray[3] = ip.substring(thirdSplit + 1).toInt();
 
-  Serial.println(String(first) + "." + String(second) + "." + String(third) + "." + String(fourth));
-  int arr[4] = {first, second, third, fourth};
-  return arr;
+  //  Serial.println(String(ipArray[0]) + ":" + String(ipArray[1]) + ":" + String(ipArray[2]) + ":" + String(ipArray[3]));
 }
 
 void resetSPIFFS()
 {
-  Serial.println("");
-  Serial.println("ABOUT TO FORMAT SPIFFS");
+  Serial.println("[resetSPIFFS]");
+  Serial.println("\n\tABOUT TO FORMAT SPIFFS");
   SPIFFS.begin();
   SPIFFS.format();
   SPIFFS.end();
-  Serial.println("SPIFFS FORMATTED");
+  Serial.println("\n\tSPIFFS FORMATTED");
   Serial.println("");
 }
 
 void definePins()
 {
-  Serial.println("Define pins");
+  Serial.println("[DefinePins]");
   pinMode(green, OUTPUT);
   pinMode(yellow, OUTPUT);
   pinMode(red, OUTPUT);
   pinMode(GND, OUTPUT);
   digitalWrite(GND, LOW);
   digitalWrite(BUILTIN_LED, HIGH);
-  return;
+  Serial.println("\n\tPins set.");
+  Serial.println("");
 }
 
-void loadSettings(String filename)
+String loadFile(String filename)
 {
   SPIFFS.begin();
-  int numberOfSSIDs = -1;
   String s;
 
   if (SPIFFS.exists(filename))
@@ -98,126 +96,110 @@ void loadSettings(String filename)
         s += f.readStringUntil('\n');
       }
     }
+    else
+      Serial.println("\t\tPointer to file could not open.");
     f.close();
   }
+  else
+    Serial.println("\t\tFile " + filename + " does not exist.");
   SPIFFS.end();
+  return s;
+}
+
+void saveToFile(String filename, String settings)
+{
+  SPIFFS.begin();
+  File f = SPIFFS.open(filename, "w+");
+  if (f)
+    f.println(settings);
+  f.close();
+  SPIFFS.end();
+}
+
+void loadSettings(String filename)
+{
+  Serial.println("[loadSettings]");
+  String s = loadFile(filename);
   DynamicJsonDocument doc(1024);
   auto error = deserializeJson(doc, s);
 
   AMBER_TIME = doc["transition_speed"];
-  AMBER = doc["amber_transition"];
+  AMBER_TRANSITION = doc["amber_transition"];
   RED_TO_GREEN = doc["red_to_green"];
   GREEN_TO_RED = doc["green_to_red"];
   AP_NAME = doc["ap_name"].as<String>();
   DEFAULT_IP = doc["default_ip"].as<String>();
   PHONE_IP = doc["phone_ip"].as<String>();
   AP_IP = doc["ap_ip"].as<String>();
+
+  String str = "[loadSettings]"
+               "\n\tTransition speed: " +
+               String(AMBER_TIME) +
+               "\n\tPass by Amber? " + String(AMBER_TRANSITION) +
+               "\n\t   When Red to Green? " + String(RED_TO_GREEN) +
+               "\n\t   When Green to Red? " + String(GREEN_TO_RED) +
+               "\n\tAP Name: " + AP_NAME +
+               "\n\tDefault IPs:" +
+               "\n\t   Standard: " + DEFAULT_IP +
+               "\n\t   Phone (tether): " + PHONE_IP +
+               "\n\t   AP: " + AP_IP;
+  Serial.println(str);
 }
 
-// WIFI functions
-int numberOfStoredSSIDs(String filename)
+int loadSSIDs(String filename, ssid availableSlots[])
 {
+  Serial.println("[loadSSIDs]");
   SPIFFS.begin();
+  String s = loadFile(filename);
 
-  int numberOfSSIDs = -1;
-  if (SPIFFS.exists(filename))
+  DynamicJsonDocument doc(1024);
+  auto error = deserializeJson(doc, s);
+  if (error)
   {
-    File f = SPIFFS.open(filename, "r");
-    if (f)
-    {
-      String s;
-      s = f.readStringUntil('\n');
-      s.trim();
-      numberOfSSIDs = s.toInt();
-      //      Serial.println(s);
-    }
-    f.close();
+    Serial.print(F("deserializeJson() failed with code "));
+    Serial.println(error.c_str());
+    deserializeJson(doc, "[]");
   }
-  SPIFFS.end();
-  return numberOfSSIDs;
-}
 
-void loadSSIDsFromFile(int numberOfSSIDs, ssid *wifiInfo, String filename)
-{
-  SPIFFS.begin();
-
-  if (SPIFFS.exists(filename))
+  //Serial.println("[loadSSIDs]   In file: " + String(doc.size()) + " elements:");
+  for (int i = 0; i < doc.size(); i++)
   {
-    File f = SPIFFS.open(filename, "r");
-    if (f)
-    {
-      String s;
-      s = f.readStringUntil('\n');
-      s.trim();
-      for (int i = 0; i < numberOfSSIDs; i++)
-      {
-        s = f.readStringUntil('\n');
-        s.trim();
-        int firstComma = s.indexOf(",");
-        int secondComma = s.indexOf(",", firstComma + 1);
-        String ssid = s.substring(0, firstComma);
-        String pwd = s.substring(firstComma + 1, secondComma);
-        bool type = s.substring(secondComma + 1).equals("T");
-
-        wifiInfo[i].name = ssid;
-        wifiInfo[i].pwd = pwd;
-        wifiInfo[i].type = type;
-      }
-    }
-    f.close();
+    availableSlots[i].ssid = doc[i]["ssid"].as<String>();
+    availableSlots[i].pwd = doc[i]["pwd"].as<String>();
+    availableSlots[i].type = doc[i]["type"];
+    //printEntryString(String(i + 1), availableSlots[i].ssid, availableSlots[i].pwd, availableSlots[i].type);
   }
-  SPIFFS.end();
-}
 
-void saveSSIDsInFile(int numberOfSSIDs, ssid *wifiInfo, String filename)
-{
-  SPIFFS.begin();
-  File f = SPIFFS.open(filename, "w+");
-  if (f)
-  {
-    f.println(String(numberOfSSIDs));
-
-    for (int i = 0; i < numberOfSSIDs; i++)
-      f.println(printEntry(wifiInfo[i]));
-  }
-  f.close();
-  SPIFFS.end();
-
-  //  debugPrintSSIDsInFile(filename);
+  return doc.size();
 }
 
 void debugPrintSSIDsInFile(String filename)
 {
-  int number = numberOfStoredSSIDs(filename);
-  ssid existing[20];
-  loadSSIDsFromFile(number, existing, filename);
+  ssid ssidSlots[20];
+  int n = loadSSIDs(filename, ssidSlots);
   Serial.println();
-  Serial.println("SSIDs in " + filename);
-  //  for(int i=0; i< number; i++)
-  //     printEntry(existing[i]);
+  Serial.println("[debugPrintSSIDsInFile]");
+  Serial.println("\n\tSSIDs in " + filename + ": " + n + " elements");
+
+  for (int i = 0; i < n; i++)
+    printEntry(ssidSlots[i]);
 }
 
+String printEntryString(String n, String ssid, String pwd, boolean type)
+{
+  String s = "\t  " + n + ". " + ssid + " - " + pwd + " (" + type + ")";
+  Serial.println(s);
+  return s;
+}
 String printEntry(ssid entry)
 {
-  String s = entry.name + "," + entry.pwd + ",";
-  s += entry.type ? "T" : "F";
-  //  Serial.println(s);
+  String s = printEntryString("", entry.ssid, entry.pwd, entry.type);
   return s;
 }
 ssid findValidWifi(String filename)
 {
-  ssid storedOptions[20];
-  int numberOfStoredOptions;
-
-  numberOfStoredOptions = numberOfStoredSSIDs(filename);
-
-  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, filename);
-
-  Serial.println("SSIDs in " + filename);
-  //  for (int i = 0; i < numberOfStoredOptions; i++)
-  //    printEntry(storedOptions[i]);
-
-  Serial.println("Finding valid Wifi");
+  ssid ssidSlots[20];
+  int n = loadSSIDs(filename, ssidSlots);
 
   int nbVisibleNetworks = 0;
   while (nbVisibleNetworks == 0)
@@ -235,19 +217,19 @@ ssid findValidWifi(String filename)
   int attempts = 20;
   int i = 0;
   int j;
-  ssid correctOne = {name : "", pwd : "", type : false};
+  ssid correctOne = {ssid : "", pwd : "", type : false};
   while (foundValidWifi == false && attempts > 0)
   {
     String candidate_ssid = WiFi.SSID(i);
-    Serial.print("Checking ");
-    Serial.println(candidate_ssid);
-    for (j = 0; j < numberOfStoredOptions; j++)
+    Serial.println("\tChecking " + candidate_ssid);
+    for (j = 0; j < n; j++)
     {
-      if (storedOptions[j].name.equals(candidate_ssid))
+      //      Serial.println("\tComparing to " + ssidSlots[j].ssid + " (" + ssidSlots[j].ssid.equals(candidate_ssid) + ")");
+      if (ssidSlots[j].ssid.equals(candidate_ssid))
       {
-        Serial.print("THIS IS IT: ");
+        correctOne = ssidSlots[j];
+        Serial.println("\t  THIS IS IT: " + correctOne.ssid + "(" + correctOne.type + ")");
         foundValidWifi = true;
-        correctOne = storedOptions[j];
         break;
       }
     }
@@ -261,19 +243,20 @@ ssid findValidWifi(String filename)
 
 void connectToWifi(ssid wifiData)
 {
-  int *ip;
+  int ip[4];
+  Serial.println("[connectToWifi]");
+  Serial.print("\tConnecting to selected wifi: ");
+  printEntry(wifiData);
 
-  Serial.println("Connecting to selected wifi");
-
-  WiFi.begin(wifiData.name, wifiData.pwd);
+  WiFi.begin(wifiData.ssid, wifiData.pwd);
 
   //IP Handling
-  ip = convertToIp(DEFAULT_IP);
+  convertToIp(DEFAULT_IP, ip);
   IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
   IPAddress gateway(192, 168, 1, 1);
   if (wifiData.type)
   {
-    ip = convertToIp(PHONE_IP);
+    convertToIp(PHONE_IP, ip);
     IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
     IPAddress gateway(192, 168, 43, 150);
   }
@@ -281,28 +264,26 @@ void connectToWifi(ssid wifiData)
   IPAddress subnet(255, 255, 255, 0);
 
   if (!WiFi.config(local_IP, gateway, subnet))
-  {
     Serial.println("STA Failed to configure");
-  }
+
   while (WiFi.status() != WL_CONNECTED)
-  {
     delay(500);
-  }
 
   // WiFi Connected
   Serial.println("");
-  Serial.println("Connected!");
-  Serial.print("IP: ");
+  Serial.println("\tConnected!");
+  Serial.print("\t IP: ");
   Serial.println(WiFi.localIP());
-  Serial.print("MAC: ");
-  Serial.println(WiFi.macAddress());
+  Serial.print("\t MAC: ");
+  Serial.println( WiFi.macAddress());
 }
+
 void initializeAsAP()
 {
   int *ip;
   digitalWrite(BUILTIN_LED, HIGH);
   Serial.print("Setting soft-AP configuration ... ");
-  ip = convertToIp(DEFAULT_IP);
+  convertToIp(DEFAULT_IP, ip);
   Serial.println(WiFi.softAPConfig(IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
   Serial.print("Setting soft-AP ... ");
   Serial.println(WiFi.softAP(AP_NAME + "_AP") ? "Ready" : "Failed!");
@@ -311,7 +292,7 @@ void initializeAsAP()
 }
 void establishDDNS()
 {
-  Serial.println("Establishing DynDNS");
+  Serial.println("[Establishing DynDNS]");
   String dyndns = "semaforo.myddns.me";
   EasyDDNS.service("noip");
   EasyDDNS.client(dyndns, "ggonzalezmartin@gmail.com", "PUT0noip!");
@@ -319,42 +300,45 @@ void establishDDNS()
     Serial.print("EasyDDNS - IP Change Detected: ");
     Serial.println(newIP);
   });
-  Serial.println("DynDNS " + dyndns + " is up and running");
+  Serial.println("\tDynDNS " + dyndns + " is up and running");
 }
 void establishmDNS()
 {
-  String mDNSname = "semaforito";
-  Serial.println("Establishing mDNS " + mDNSname + ".local");
-  if (!MDNS.begin(mDNSname, WiFi.localIP()))
+  Serial.println("[Establishing mDNS]");
+  Serial.println("\tSetting up on " + AP_NAME + ".local");
+  if (!MDNS.begin(AP_NAME, WiFi.localIP()))
   {
     Serial.println("Error setting up MDNS responder");
   }
   MDNS.update();
   MDNS.addService("http", "tcp", 80);
   MDNS.addService("https", "tcp", 80);
-  Serial.println("MDNS responder is up and running");
+  Serial.println("\tMDNS responder is up and running on " + AP_NAME +".local");
 }
 
 // WEBSERVER functions
 void initialiseWebServer()
 {
-  Serial.println("Initialising Webserver");
+  Serial.println("[Initialise Webserver]");
   webserver.on("/", HTTP_GET, rootPage);
   webserver.on("/CHANGESTATUS", HTTP_POST, handleTrafficLightStatus);
   webserver.on("/TURNONANDOFF", HTTP_POST, handleTrafficLightOnAndOff);
   webserver.on("/SETTINGS", HTTP_GET, settingsPage);
-  webserver.on("/SETTINGS_SUBMIT", HTTP_POST, settingsPage);
+  webserver.on("/SETTINGS_SUBMIT", HTTP_POST, processSettings);
+  webserver.on("/SETTINGS_RESET", HTTP_POST, resetSettings);
   webserver.on("/SSID_SETTINGS", HTTP_GET, ssidSettingsPage);
   webserver.on("/SSID_SETTINGS_SUBMIT", HTTP_POST, processSSIDS);
   webserver.onNotFound(notfoundPage);
   webserver.begin();
-  Serial.println("Webserver is up and running");
+  Serial.println("\tWebserver is up and running");
+  Serial.println("--------------");
+  Serial.println("");
   return;
 }
 
 String getTrafficLightHTML()
 {
-  String htmlCode = "";
+  String htmlCode = loadFile(SEMAFORO_HTML_FILE);
   String currentColor = "red";
 
   if (!semaforoEncendido)
@@ -362,88 +346,51 @@ String getTrafficLightHTML()
   else if (semaforoAbierto)
     currentColor = "green";
 
-  SPIFFS.begin();
-
-  if (SPIFFS.exists(SEMAFORO_HTML_FILE))
-  {
-    File f = SPIFFS.open(SEMAFORO_HTML_FILE, "r");
-    while (f && f.available())
-    {
-      htmlCode += f.readStringUntil('\n');
-    }
-    htmlCode.replace("{{color}}", currentColor);
-    f.close();
-  }
-  SPIFFS.end();
+  htmlCode.replace("{{color}}", currentColor);
 
   //  Serial.println(htmlCode);
   return htmlCode;
 }
 String getSSIDSettingsHTML()
 {
-  String htmlCode;
+  //  Serial.println("Composing HTML");
+  String htmlCode = loadFile(SSID_SETTINGS_HTML_FILE);
   String storedSSIDsInHTML = "";
-  int numberOfStoredOptions;
   ssid storedOptions[20];
-  numberOfStoredOptions = numberOfStoredSSIDs(SSIDS_FILE);
-  loadSSIDsFromFile(numberOfStoredOptions, storedOptions, SSIDS_FILE);
+  int n = loadSSIDs(SSIDS_FILE, storedOptions);
 
-  for (int i = 0; i < numberOfStoredOptions; i++)
+  for (int i = 0; i < n; i++)
   {
     String standard_checked = storedOptions[i].type ? "" : "checked";
     String phone_checked = storedOptions[i].type ? "checked" : "";
     String n = String(i + 1);
     storedSSIDsInHTML += ""
                          "  <tr id='container_" +
-                         n + "'>"
-                             "     <td><input type='text' class='ssid' name='ssid_" +
-                         n + "' value='" + storedOptions[i].name + "'/></td>"
-                                                                   "     <td><input type='password' class='pwd' name='pwd_" +
-                         n + "' value='" + storedOptions[i].pwd + "'/></td>" +
+                         n + "'>" +
+                         "     <td><input type='text' class='ssid' name='ssid_" + n + "' value='" + storedOptions[i].ssid + "'/></td>" +
+                         "     <td><input type='password' class='pwd' name='pwd_" + n + "' value='" + storedOptions[i].pwd + "'/></td>" +
                          "     <td><input class='type' type='radio'  name='type_" + n + "' value='standard' " + standard_checked + "><label>Standard</label></input><br>" +
-                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>"
-                                                                                                                                "  </tr>";
+                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>" +
+                         "  </tr>";
   }
+  //  Serial.println(storedSSIDsInHTML);
 
-  SPIFFS.begin();
-  if (SPIFFS.exists(SSID_SETTINGS_HTML_FILE))
-  {
-    File f = SPIFFS.open(SSID_SETTINGS_HTML_FILE, "r");
-    while (f && f.available())
-    {
-      htmlCode += f.readStringUntil('\n');
-    }
-    htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
-    f.close();
-  }
-  SPIFFS.end();
-
+  htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
+  //  Serial.println("HTML Code read: ");
   //  Serial.println(htmlCode);
   return htmlCode;
 }
 String getGeneralSettingsHTML()
 {
-  String htmlCode;
-
-  SPIFFS.begin();
-  if (SPIFFS.exists(SSID_SETTINGS_HTML_FILE))
-  {
-    File f = SPIFFS.open(SSID_SETTINGS_HTML_FILE, "r");
-    while (f && f.available())
-    {
-      htmlCode += f.readStringUntil('\n');
-    }
-    htmlCode.replace("{{speed_value}}", String(AMBER_TIME));
-    htmlCode.replace("{{amber}}", AMBER ? "checked" : "");
-    htmlCode.replace("{{red_to_green}}", RED_TO_GREEN ? "checked" : "");
-    htmlCode.replace("{{green_to_red}}", GREEN_TO_RED ? "checked" : "");
-    htmlCode.replace("{{standard_ip}}", DEFAULT_IP);
-    htmlCode.replace("{{phone_ip}}", PHONE_IP);
-    htmlCode.replace("{{ap_ip}}", AP_IP);
-    htmlCode.replace("{{ap_name}}", AP_NAME);
-    f.close();
-  }
-  SPIFFS.end();
+  String htmlCode = loadFile(SETTINGS_HTML_FILE);
+  htmlCode.replace("{{transition_speed}}", String(AMBER_TIME));
+  htmlCode.replace("{{amber_transition}}", AMBER_TRANSITION ? "checked" : "");
+  htmlCode.replace("{{red_to_green}}", RED_TO_GREEN ? "checked" : "");
+  htmlCode.replace("{{green_to_red}}", GREEN_TO_RED ? "checked" : "");
+  htmlCode.replace("{{default_ip}}", DEFAULT_IP);
+  htmlCode.replace("{{phone_ip}}", PHONE_IP);
+  htmlCode.replace("{{ap_ip}}", AP_IP);
+  htmlCode.replace("{{ap_name}}", AP_NAME);
 
   //  Serial.println(htmlCode);
   return htmlCode;
@@ -511,42 +458,32 @@ void settingsPage()
   webserver.send(200, "text/html", getGeneralSettingsHTML());
 }
 
+void processSettings()
+{
+    setSettings(webserver.arg("plain"));
+}
+void resetSettings()
+{
+    setSettings(loadFile(DEFAULT_SETTINGS_FILE));
+}
+
+void setSettings(String values)
+{
+    saveToFile(SETTINGS_FILE, values);
+    loadSettings(SETTINGS_FILE);
+    webserver.sendHeader("Location", "/SETTINGS");
+    webserver.send(303);
+}
+
 void processSSIDS()
 {
-
   String ssidsRaw = webserver.arg("plain");
-  // Serial.println("POST As string:");
-  // Serial.println(ssidsRaw);
-
-  // Serial.println("");
   DynamicJsonDocument doc(1024);
-
-  auto error = deserializeJson(doc, ssidsRaw);
-
-  if (error)
-  {
-    Serial.print(F("deserializeJson() failed with code "));
-    Serial.println(error.c_str());
-    return;
-  }
-  //  serializeJsonPretty(doc, Serial);
-
-  ssid ssidsToStore[doc.size()];
-  for (int i = 0; i < doc.size(); i++)
-  {
-    //    Serial.println(doc[i]["ssid"].as<String>());
-    ssidsToStore[i].name = doc[i]["ssid"].as<String>();
-    ssidsToStore[i].pwd = doc[i]["pwd"].as<String>();
-    ssidsToStore[i].type = doc[i]["type"];
-    //    printEntry(ssidsToStore[i]);
-  }
-
-  saveSSIDsInFile(doc.size(), ssidsToStore, SSIDS_FILE);
-
+  saveToFile(SSIDS_FILE, ssidsRaw);
   webserver.sendHeader("Location", "/SSID_SETTINGS");
   webserver.send(303);
-  Serial.println("Webserver relocation sent");
 }
+
 void notfoundPage()
 {
   webserver.send(404, "text/plain", "404: Not found");
@@ -561,7 +498,7 @@ void sendJSCall(String call)
 // Traffic light logic
 void cerrarSemaforo(int ambar_wait)
 {
-  if (AMBER && GREEN_TO_RED)
+  if (AMBER_TRANSITION && GREEN_TO_RED)
   {
     transition(yellow, green, red);
     delay(ambar_wait * 1000);
@@ -571,7 +508,7 @@ void cerrarSemaforo(int ambar_wait)
 }
 void abrirSemaforo(int ambar_wait)
 {
-  if (AMBER && RED_TO_GREEN)
+  if (AMBER_TRANSITION && RED_TO_GREEN)
   {
     transition(yellow, red, green);
     delay(ambar_wait * 1000);
@@ -646,15 +583,17 @@ void setup()
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
 
-  //  resetSPIFFS();
+  //resetSPIFFS();
   definePins();
   setTrafficLightAsLoading();
 
   loadSettings(SETTINGS_FILE);
-
   ssid validWifi = findValidWifi(SSIDS_FILE);
 
-  if (validWifi.name != "")
+  Serial.println("\tSelected wifi to connect:");
+  printEntry(validWifi);
+
+  if (validWifi.ssid != "")
   {
     connectToWifi(validWifi);
     establishDDNS();
