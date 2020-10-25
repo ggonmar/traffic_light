@@ -19,6 +19,11 @@
   <script>
     function addNew() {
       let table = document.getElementById('ssids');
+      if(table.rows.length -3 >= 20)
+      {
+        window.alert("There is a limit of 20 SSIDs to be stored... we think that's enough!");
+        return;
+      }
       let index = table.rows.length - 3;
       var row = table.insertRow(index);
       row.id = "container_" + index;
@@ -33,21 +38,13 @@
       cell3.innerHTML = `<input class='radio' type='radio'  name='type_${index}' value="standard" checked><label>Standard</label></input><br>` +
         `<input class='radio' type='radio'  name='type_${index}' value="phone"><label>Phone (Tether)</label></input>`;
     }
-    function returnToTrafficLight() {
-      try {
-        fetch("/", {
-          method: "GET"
-        }).then(res => {
-          //          console.log("Request complete! response:", res);
-        }).catch(err => { });
-      } catch (e) { };
-    }
+
     function prepareAndSendData() {
+      document.body.style.cursor = "wait";
       const form = document.querySelector("form");
       let data = new FormData(form);
       let processedData = [];
       let numberOfElements = document.getElementsByClassName('ssid').length;
-
       for (let i = 1; i <= numberOfElements; i++) {
         if (data.get("ssid_" + i) === "" && document.getElementById('container_' + i))
           document.getElementById('container_' + i).remove()
@@ -60,7 +57,7 @@
         }
       }
       try {
-        fetch("/ADMIN_SUBMIT", {
+        fetch("/SSID_SETTINGS_SUBMIT", {
           method: "POST",
           body: JSON.stringify(processedData)
         }).then(res => {

@@ -1,0 +1,155 @@
+<html>
+<title>[ADMIN] Semaforo de Reunion 2.0 </title>
+
+<head>
+  <style type="text/css">
+    input[type=radio] {
+      vertical-align: text-bottom;
+      width: 0.8em;
+    }
+
+    label {
+      font-size: 0.8em;
+      display: inline-flex;
+      text-align: right;
+      min-width: 35px;
+    }
+
+    input[type=text] {
+      display: inline-block;
+      text-align: center;
+      clear: both
+    }
+
+    input[type=range] {
+      display: inline-block;
+      width: 50%
+    }
+
+    td {
+      line-height: 2.5em;
+    }
+
+    td.text {
+      text-align: right
+    }
+  </style>
+  <script>
+    function prepareAndSendData() {
+      const form = document.querySelector("form");
+      let data = new FormData(form);
+      let processedData = {};
+      processedData.transition_speed = parseInt(data.get("transition_speed"));
+      processedData.amber_transition = data.get("amber_transition") === "on" ? true : false;
+      processedData.red_to_green = data.get("red_to_green") === "on" ? true : false;
+      processedData.green_to_red = data.get("green_to_red") === "on" ? true : false;
+      processedData.default_ip = data.get("default_ip");
+      processedData.phone_ip = data.get("phone_ip");
+      processedData.ap_ip = data.get("ap_ip");
+      processedData.ap_name = data.get("ap_name");
+      document.body.style.cursor = "wait";
+      try {
+        fetch("/SETTINGS_SUBMIT", {
+          method: "POST",
+          body: JSON.stringify(processedData)
+        }).then(res => {
+          location.reload();
+        }).catch(err => { });
+      } catch (e) { };
+    }
+
+    function resetToDefault() {
+      document.body.style.cursor = "wait";
+      try {
+        fetch("/SETTINGS_RESET", {
+          method: "POST"
+        }).then(res => {
+          location.reload();
+        }).catch(err => { });
+      } catch (e) { };
+    }
+    function updateTextInput(val) {
+      document.getElementById('input_transition_speed').value = val;
+    }
+    function updateSlider(val) {
+      document.getElementById('transition_speed').value = val;
+    }
+  </script>
+</head>
+<!--   <body onload=sendJSCall('"+currentColor+"')> -->
+
+<body>
+  <h1 id='title'>Administration page</h1>
+  <form>
+    <table>
+      <tr>
+        <td>
+          <label for="transition_speed">Speed on switching</label>
+          <input type="range" id="transition_speed" value="{{transition_speed}}" name="transition_speed" min="0"
+            max="10" onchange="updateTextInput(this.value);">
+          <input type="text" id="input_transition_speed" value="{{transition_speed}}"
+            onchange="updateSlider(this.value)" style="width:35px">
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input type="checkbox" id="amber_transition" name="amber_transition" {{amber_transition}}>
+          <label for="amber_transition">Amber turns on with previous state: </label>
+          <br>
+          <input type="checkbox" id="red_to_green" name="red_to_green" {{red_to_green}}>
+          <label for="red_to_green">When opening, transition includes amber</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <input type="checkbox" id="green_to_red" name="green_to_red" {{green_to_red}}>
+          <label for="green_to_red">When closing, transition includes amber</label>
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="default_ip">IP address on standard networks</label>
+          <input type="text" id="default_ip" name="default_ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{default_ip}}">
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="phone_ip">IP address on phone (tethered) networks</label>
+          <input type="text" id="phone_ip" name="phone_ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{phone_ip}}">
+        </td>
+      </tr>
+      <tr>
+        <td class="text">
+          <label for="ap_ip">IP address when Access Point</label>
+          <input type="text" id="ap_ip" name="ap_ip" minlength="7" maxlength="15" size="15"
+            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{ap_ip}}">
+        </td>
+      </tr>
+
+      <tr>
+        <td class="text">
+          <label for="ap_name">Name of AP SSID</label>
+          <input type="text" id="ap_name" name="ap_name" value="{{ap_name}}">
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align:center">
+          <button type="button" onclick="prepareAndSendData()" id='save-all-button'
+            style='width:150px; height:70px; margin-top:30px'>Guardar</button>
+        </td>
+      </tr>
+
+      <tr>
+        <td style="text-align:center">
+          <button type="button" onclick="resetToDefault()" id='reset-all-button'
+            style='width:150px; height:30px; margin-top:50px'>Reset to default</button>
+        </td>
+      </tr>
+    </table>
+  </form>
+</body>
+
+</html>
