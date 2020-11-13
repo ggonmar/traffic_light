@@ -3,40 +3,85 @@
 
 <head>
   <style type="text/css">
-    input[type=radio] {
-      vertical-align: text-bottom;
-      width: 0.8em;
-    }
-
     label {
-      font-size: 0.8em;
-      display: inline-flex;
-      text-align: right;
-      min-width: 35px;
+      font-size: 1em;
       line-height: 1.1em;
     }
 
-    input[type=text] {
-      display: inline-block;
-      text-align: center;
-      clear: both
+    #page-container {
+      display: flex;
+      flex-direction: column;
+      margin-left: 3%;
+      width: 80%;
+      text-align: justify;
+    }
+
+    .label-and-textfield {
+      display: flex;
+      flex-direction: column;
+      margin: 2% 0%;
+      background-color: "";
+    }
+
+    .textfield {
+      flex-grow: 100;
+      position: relative;
+      width: 100%
+    }
+
+    .label-for-textfield {
+      font-size: 0.9em;
     }
 
     input[type=range] {
-      display: inline-block;
-      width: 50%
+      flex-grow: 10;
+      min-width: 90%;
     }
 
-    td {
-      line-height: 2.5em;
+    .range_complement {
+      vertical-align: top;
+      margin-left: 10px;
+      flex-grow: 0;
+      width: 10%;
+
     }
 
-    td.text {
-      text-align: right
+    .label-and-checkbox {
+      line-height: 2em;
     }
-    .blocks{
-      display:inline-block
+
+    .range-and-value {
+      display: flex;
+      flex-direction: row;
     }
+
+    .sub {
+      margin-left: 30px;
+    }
+
+    button {
+      min-width:20%;
+      height: 5em;
+      margin: auto;
+      margin-top: 20px;
+    }
+    #action-buttons{
+      display: flex;
+      flex-direction:row;
+      justify-content:space-around;
+    }
+    .textfield-pack-item{
+      flex-grow: 1;
+    }
+    .textfield-pack{
+      display:flex;
+      flex-direction:row; 
+      justify-content: space-around;
+    }
+
+    .textfield-pack > div {
+        margin: 1%; /* HERE WE ADD THE SPACE */
+      }
   </style>
   <script>
     function prepareAndSendData() {
@@ -77,103 +122,107 @@
     }
     function updateTextInput(val) {
       document.getElementById('input_transition_speed').value = val;
+      document.getElementById('amber_transition').checked = val != 0;
+      if (val == 0) {
+        document.getElementById('green_to_red').checked = false
+        document.getElementById('red_to_green').checked = false
+      }
     }
     function updateSlider(val) {
       document.getElementById('transition_speed').value = val;
+      if (val == 0) {
+        document.getElementById('green_to_red').checked = false
+        document.getElementById('red_to_green').checked = false
+      }
     }
   </script>
 </head>
 <!--   <body onload=sendJSCall('"+currentColor+"')> -->
 
 <body>
-  <h1 id='title'>Administration page</h1>
-  <form>
-    <table>
-      <tr>
-        <td>
-          <label for="transition_speed">Speed on switching</label>
-          <input type="range" id="transition_speed" value="{{transition_speed}}" name="transition_speed" min="0"
-            max="10" onchange="updateTextInput(this.value);">
-          <input type="text" id="input_transition_speed" value="{{transition_speed}}"
-            onchange="updateSlider(this.value)" style="width:35px">
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <input type="checkbox" id="amber_transition" name="amber_transition" {{amber_transition}}>
-          <label for="amber_transition">Amber turns on with previous state: </label>
-          <br>
-          <input type="checkbox" id="red_to_green" name="red_to_green" {{red_to_green}}>
-          <label for="red_to_green">When opening, transition includes amber</label>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <input type="checkbox" id="green_to_red" name="green_to_red" {{green_to_red}}>
-          <label for="green_to_red">When closing, transition includes amber</label>
-        </td>
-      </tr>
-      <tr>
-        <td class="text">
-          <label for="default_ip">IP address on standard networks</label>
-          <input type="text" id="default_ip" name="default_ip" minlength="7" maxlength="15" size="15"
-            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{default_ip}}">
-        </td>
-      </tr>
-      <tr>
-        <td class="text">
-          <label for="phone_ip">IP address on phone (tethered) networks</label>
-          <input type="text" id="phone_ip" name="phone_ip" minlength="7" maxlength="15" size="15"
-            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{phone_ip}}">
-        </td>
-      </tr>
-      <tr>
-        <td class="text">
-          <label for="ap_ip">IP address when Access Point</label>
-          <input type="text" id="ap_ip" name="ap_ip" minlength="7" maxlength="15" size="15"
-            pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{ap_ip}}">
-        </td>
-      </tr>
-
-      <tr>
-        <td class="text">
-          <label for="ap_name">Name of AP SSID</label>
-          <input type="text" id="ap_name" name="ap_name" value="{{ap_name}}">
-        </td>
-      </tr>
-
-      <tr>
-        <td>
-          <div class="blocks">
-          <label for="dyn_dns_url">DynDNS url</label><br>
-          <input type="text" id="dyn_dns_url" name="dyn_dns_url" value="{{dyn_dns_url}}">
+  <div id="page-container">
+    <h1 id='title'>Administration page</h1>
+    <form>
+      <div id="container-speed" class="label-and-textfield">
+        <label for="transition_speed" class="label-for-textfield">Speed on switching</label>
+        <div class="range-and-value">
+          <input type="range" name="transition_speed" id="transition_speed" class="textfield"
+            value="{{transition_speed}}" min="0" max="10" onchange="updateTextInput(this.value);" />
+          <input type="text" id="input_transition_speed" class="range_complement" value="{{transition_speed}}"
+            onchange="updateSlider(this.value)" />
         </div>
-        <div class="blocks">
-          <label for="dyn_dns_username">Username</label><br>
-          <input type="text" id="dyn_dns_username" name="dyn_dns_username" value="{{dyn_dns_username}}">
-        </div>
-        <div class="blocks">
-          <label for="dyn_dns_pwd">Password</label><br>
-          <input type="password" id="dyn_dns_pwd" name="dyn_dns_pwd" value="{{dyn_dns_pwd}}">
-        </div>
-      </td>
-      </tr>
+      </div>
 
-      <tr>
-        <td style="text-align:center">
-          <button type="button" onclick="prepareAndSendData()" id='save-all-button'
-            style='width:150px; height:70px; margin-top:30px'>Guardar</button>
-        </td>
-      </tr>
+      <div class="label-and-checkbox">
+        <input type="checkbox" name="amber_transition" id="amber_transition" class="label-for-checkbox"
+          {{amber_transition}} />
+        <label for="amber_transition" class="checkbox">Amber turns on with previous state: </label>
+      </div>
+      <div class="label-and-checkbox sub">
+        <input type="checkbox" name="red_to_green" id="red_to_green" class="label-for-checkbox" {{red_to_green}} />
+        <label for="red_to_green" class="checkbox">When opening, transition includes amber</label>
+      </div>
+      <div class="label-and-checkbox sub">
+        <input type="checkbox" name="green_to_red" id="green_to_red" class="label-for-checkbox" {{green_to_red}} />
+        <label for="green_to_red" class="checkbox">When closing, transition includes amber</label>
+      </div>
 
-      <tr>
-        <td style="text-align:center">
-          <button type="button" onclick="resetToDefault()" id='reset-all-button'
-            style='width:150px; height:30px; margin-top:50px'>Reset to default</button>
-        </td>
-      </tr>
-    </table>
-  </form>
+      <div class="label-and-textfield">
+        <label for="default_ip" class="label-for-textfield">IP address on standard networks</label>
+        <input type="text" id="default_ip" name="default_ip" class="textfield"
+          placeholder="IP cuando en redes wifi normales (192.168.1.1)" minlength="7" maxlength="15" size="15"
+          pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{default_ip}}" />
+      </div>
+      <div class="label-and-textfield">
+        <label for="phone_ip" class="label-for-textfield">IP address on phone (tethered) networks</label>
+        <input type="text" id="phone_ip" name="phone_ip" class="textfield"
+          placeholder="IP cuando conectado a un Android tether (192.168.43.1)" minlength="7" maxlength="15" size="15"
+          pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{phone_ip}}" />
+      </div>
+      <div class="label-and-textfield">
+        <label for="ap_ip" class="label-for-textfield">IP address when Access Point</label>
+        <input type="text" id="ap_ip" name="ap_ip" class="textfield"
+          placeholder="IP cuando se establezca como AP (sin wifis conocidas)" minlength="7" maxlength="15" size="15"
+          pattern="^((\d{1,2}|1\d\d|2[0-4]\d|25[0-5])\.){3}(\d{1,2}|1\d\d|2[0-4]\d|25[0-5])$" value="{{ap_ip}}" />
+      </div>
+      <div class="label-and-textfield">
+        <label for="ap_name" class="label-for-textfield">Name of AP SSID and mDNS (.local)</label>
+        <input type="text" id="ap_name" name="ap_name" class="textfield"
+          placeholder="Cuando no se encuentra wifi, se establece una con este nombre." value="{{ap_name}}" />
+      </div>
+      <div class="label-and-textfield">
+        <label for="listen_port" class="label-for-textfield">Server port</label>
+        <input type="text" id="listen_port" name="listen_port" class="textfield"
+          placeholder="Puerto a utilizar. Cualquiera por encima de 4000 servirá" value="{{listen_port}}" />
+      </div>
+
+
+      <div class="textfield-pack">
+        <div class="label-and-textfield textfield-pack-item">
+          <label for="dyn_dns_url" class="label-for-textfield">DynDNS URL</label>
+          <input type="text" id="dyn_dns_url" name="dyn_dns_url" class="textfield"
+            placeholder="Url reservada en no-ip.org" value="{{dyn_dns_url}}" />
+        </div>
+        <div class="label-and-textfield textfield-pack-item">
+          <label for="dyn_dns_username" class="label-for-textfield">Username</label>
+          <input type="text" id="dyn_dns_username" name="dyn_dns_username" class="textfield"
+            placeholder="Username en no-ip.org" value="{{dyn_dns_username}}" />
+        </div>
+        <div class="label-and-textfield textfield-pack-item">
+          <label for="dyn_dns_pwd" class="label-for-textfield">Password</label>
+          <input type="password" id="dyn_dns_pwd" name="dyn_dns_pwd" class="textfield"
+            placeholder="Password en no-ip.org" value="{{dyn_dns_pwd}}" />
+        </div>
+      </div>
+    </form>
+    <div id="action-buttons">
+      <button onclick="prepareAndSendData()" id='save-all-button'>Guardar</button>
+      <button onclick="resetToDefault()" id='reset-all-button'>Reset to default</button>
+      <button id='SSID_Settings' onclick="window.location='/SSID_SETTINGS'">SSID Settings</button>
+      <button id='return-button' onclick="window.location='/'">Volver</button>
+    </div>
+  </div>
+
 </body>
 
 </html>

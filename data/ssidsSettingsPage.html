@@ -3,40 +3,239 @@
 
 <head>
   <style type="text/css">
+    #page-container {
+      display: flex;
+      flex-direction: column;
+      margin-left: 3%;
+      width: 60%;
+      text-align: justify;
+    }
+
     input[type=radio] {
-      vertical-align: text-bottom;
+      vertical-align: text-top;
       width: 0.8em;
+      margin-left: 25px;
+      background-color: aquamarine
     }
 
     label {
-      font-size: 0.8em;
+      font-size: 1em;
+      line-height: 1.1em;
     }
 
     td {
       padding: 0.8em 0em;
     }
+
+    #ssid-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-evenly;
+      width: 80%;
+    }
+
+    .entry {
+      margin-bottom: 20px;
+    }
+
+    .simple {
+      display: flex;
+      flex-direction: row;
+      align-self: initial;
+    }
+
+    .simple>div {
+      margin: 6px;
+    }
+
+    .label-and-textfield {
+      display: flex;
+      flex-direction: column;
+      margin: 2% 0%;
+      background-color: "";
+    }
+
+    .expand-button {
+      border: 1px solid black;
+      vertical-align: baseline;
+      align-self: flex-end;
+    }
+
+    .remove-button {
+      vertical-align: middle;
+      align-self: flex-end;
+      font-size:1.5em;
+      margin-bottom:0px !important;
+    }
+
+    .toggle, .remove {
+      color: black;
+      text-decoration: none;
+    }
+
+    .textfield-pack {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+    }
+
+    .textfield-pack-item {
+      width: 32%;
+    }
+
+    .advanced {
+      display: none;
+      flex-direction: column;
+      margin-left: 30px;
+      border-left: gray 2px solid;
+      padding-left: 30px;
+    }
+
+    .advanced_header {
+      flex-direction: row;
+    }
+
+    .advanced_header_text {
+      margin-bottom: 0px;
+      text-decoration: underline;
+      font-size: 0.9em;
+      font-variant: small-caps;
+      font-style: italic;
+      font-weight: 700;
+      margin-right: 8%;
+      margin-left: -15px;
+    }
+
+    #action-buttons {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-around;
+    }
+
+    button {
+      min-width: 20%;
+      height: 5em;
+      margin: auto;
+      margin-top: 20px;
+    }
+
+    #data, #dummydata {
+      display: none;
+    }
   </style>
   <script>
-    function addNew() {
-      let table = document.getElementById('ssids');
-      if(table.rows.length -3 >= 20)
+
+    function removeElement(elem){
+      let ssid=document.getElementById(`ssid_${elem}`).value;
+      if(window.confirm(`Eliminar la entrada ${ssid}?`))
+        document.getElementById(`entry_${elem}`).remove();   
+    }
+    function toggleSettings(param) {
+      if (document.getElementById(`toggle_${param}`).innerText == "▲") {
+        document.getElementById(`toggle_${param}`).innerText = "▼";
+        document.getElementById(`advanced_${param}`).style.display = "none";
+      }
+      else {
+        document.getElementById(`toggle_${param}`).innerText = "▲";
+        document.getElementById(`advanced_${param}`).style.display = "flex";
+      }
+    }
+    function radioChange(index, status) {
+      let elems = document.getElementsByClassName(`advanced_${index}`);
+      for (let i = 0; i < elems.length; i++)
+        elems[i].disabled = !(status == "custom");
+      if (status == "phone")
+        assignValues("{{default_phone_ip}}", "{{default_phone_gateway}}", "{{default_phone_mask}}");
+      else if (status == "standard")
+        assignValues("{{default_wifi_ip}}}", "{{default_wifi_gateway}}", "{{default_wifi_mask}}");
+      else if (status =="custom")
       {
-        window.alert("There is a limit of 20 SSIDs to be stored... we think that's enough!");
+        let x = document.getElementById('data').innerText;
+        x = JSON.parse(x);
+        x=x.find(e => e.ssid == document.getElementById(`ssid_${index}`).value);
+        assignValues(x.ip, x.gateway, x.mask);
+      }
+
+      function assignValues(ip, gateway, mask) {
+        document.getElementById(`ip_${index}`).value = ip ? ip : "";
+        document.getElementById(`gateway_${index}`).value = gateway ? gateway : "";
+        document.getElementById(`mask_${index}`).value = mask ? mask : "";
+      }
+    }
+
+    function addNew(incomingData) {
+      data = { index: document.getElementsByClassName("simple").length + 1, ssid: "", pwd: "", type: "standard" };
+      Object.assign(data, incomingData);
+      if(data.index > 10)
+      { window.alert("No crees que ya son suficientes?\nEl Semaforo no puede almacenar mas de 10 :(");
         return;
       }
-      let index = table.rows.length - 3;
-      var row = table.insertRow(index);
-      row.id = "container_" + index;
-      // Insert new cells (<td> elements) at the 1st and 2nd position of the "new" <tr> element:
-      var cell1 = row.insertCell(0);
-      var cell2 = row.insertCell(1);
-      var cell3 = row.insertCell(2);
+      let newEntry = document.createElement('div');
+      newEntry.id = `entry_${data.index}`;
+      newEntry.className = 'entry';
+      newEntry.innerHTML = `
+          <div class="simple">
+            <div class="label-and-textfield">
+              <label for="ssid_${data.index}" class="label-for-textfield">SSID</label>
+              <input type="text" id="ssid_${data.index}" name="ssid_${data.index}" class="textfield" placeholder="Nombre de red"
+                value="${data.ssid}" />
+            </div>
+            <div class="label-and-textfield">
+              <label for="pwd_${data.index}" class="label-for-textfield">Password</label>
+              <input type="password" id="pwd_${data.index}" name="pwd_${data.index}" class="textfield" placeholder="Contraseña"
+                value="${data.pwd}" />
+            </div>
+            <div class="expand-button">
+              <a href="#" onclick="toggleSettings(${data.index});" class="toggle" id="toggle_${data.index}">&#9660;</a>
+            </div>
+            <div class="remove-button">
+              <a href="#" onclick="removeElement(${data.index});" class="remove" id="remove_${data.index}">&#128465;</a>
+            </div>
+          </div>
 
-      // Add some text to the new cells:
-      cell1.innerHTML = `<input class='ssid' type='text' name='ssid_${index}' placeholder='SSID'/>`;
-      cell2.innerHTML = `<input class='pwd' type='password'  name='pwd_${index}' placeholder='Pwd'/>`;
-      cell3.innerHTML = `<input class='radio' type='radio'  name='type_${index}' value="standard" checked><label>Standard</label></input><br>` +
-        `<input class='radio' type='radio'  name='type_${index}' value="phone"><label>Phone (Tether)</label></input>`;
+          <div class="advanced" id="advanced_${data.index}">
+            <div class="advanced_header">
+              <span class="advanced_header_text">IP Definition</span>
+              <input class="type" type="radio" data=${data.index} name="type_${data.index}" value="standard" ${data.type == "standard" ? "checked" : ""} /><label>Standard</label>
+              <input class='type' type='radio' data=${data.index} name="type_${data.index}" value='phone'  ${data.type == "phone" ? "checked" : ""} /><label>Phone (Tether)</label>
+              <input class='type' type='radio' data=${data.index} name="type_${data.index}" value='custom' ${data.type == "custom" ? "checked" : ""} /><label>Custom</label>
+
+            <div class="textfield-pack">
+              <div class="label-and-textfield textfield-pack-item">
+                <label for="ip_${data.index}" class="label-for-textfield">IP address</label>
+                <input type="text" id="ip_${data.index}" name="ip_${data.index}" class="textfield advanced_${data.index}" disabled
+                  placeholder="IP address" value="{{default_wifi_ip}}" />
+              </div>
+              <div class="label-and-textfield textfield-pack-item">
+                <label for="gateway_${data.index}" class="label-for-textfield">Gateway</label>
+                <input type="text" id="gateway_${data.index}" name="gateway_1" class="textfield advanced_${data.index}" disabled
+                  placeholder="Gateway" value="{{default_wifi_gateway}}" />
+              </div>
+              <div class="label-and-textfield textfield-pack-item">
+                <label for="mask_${data.index}" class="label-for-textfield">Subnet Mask</label>
+                <input type="text" id="mask_${data.index}" name="mask_${data.index}" class="textfield advanced_${data.index}"
+                  disabled placeholder="Mask" value="{{default_wifi_mask}}" />
+              </div>
+            </div>
+          </div>
+  `;
+
+      document.getElementById('ssid-container').appendChild(newEntry);
+      var rad = document.forms[0][`type_${data.index}`];
+      for (let i = 0; i < rad.length; i++) {
+        rad[i].addEventListener('change', function (evt) {
+          radioChange(this.getAttribute("data"), this.value);
+        });
+      }
+
+      if (data.type == "custom") {
+        document.getElementById(`ip_${data.index}`).value = data.ip;
+        document.getElementById(`gateway_${data.index}`).value = data.gateway;
+        document.getElementById(`mask_${data.index}`).value = data.mask;
+        let elems = document.getElementsByClassName(`advanced_${data.index}`);
+        for (let i = 0; i < elems.length; i++)
+          elems[i].disabled = false;
+      }
     }
 
     function prepareAndSendData() {
@@ -44,60 +243,74 @@
       const form = document.querySelector("form");
       let data = new FormData(form);
       let processedData = [];
-      let numberOfElements = document.getElementsByClassName('ssid').length;
+      let numberOfElements = document.getElementsByClassName('simple').length;
+      
       for (let i = 1; i <= numberOfElements; i++) {
-        if (data.get("ssid_" + i) === "" && document.getElementById('container_' + i))
-          document.getElementById('container_' + i).remove()
+        if (data.get(`ssid_${i}`) === "")
+          document.getElementById(`entry_${i}`).remove();
         else {
-          processedData.push({
-            ssid: data.get("ssid_" + i),
-            pwd: data.get("pwd_" + i),
-            type: data.get("type_" + i) === "phone"
-          });
+          entry = composeEntry(i);
+          processedData.push(entry);
         }
-      }
-      try {
+      } try {
         fetch("/SSID_SETTINGS_SUBMIT", {
-          method: "POST",
-          body: JSON.stringify(processedData)
+          method: "POST", body: JSON.stringify(processedData.slice(0,10))
         }).then(res => {
-          //          console.log("Request complete! response:", res);
+          // console.log("Request complete! response:", res);
         }).catch(err => { });
       } catch (e) { };
+
+      function composeEntry(i){
+        let jsonEntry={
+            ssid: data.get(`ssid_${i}`),
+            pwd: data.get(`pwd_${i}`),
+            type: data.get(`type_${i}`) 
+        };
+        if(jsonEntry.type =="custom")
+        {
+          jsonEntry.ip=data.get(`ip_${i}`);
+          jsonEntry.gateway = data.get(`gateway_${i}`)
+          jsonEntry.mask = data.get(`mask_${i}`)
+        }        
+        return jsonEntry;
+      }
     }
 
+    document.addEventListener("DOMContentLoaded", function () {
+      let locator= ['file','127.0.'].some((e)=> location.origin.includes(e)) ? "dummydata" : "data";
+      let x = document.getElementById(locator).innerText;
+      x = JSON.parse(x);
+      x.forEach(e => addNew(e));
+    });
   </script>
+
 </head>
 <!--   <body onload=sendJSCall('"+currentColor+"')> -->
 
 <body>
-  <h1 id='title'>Administration page</h1>
-  <form>
-    <table id='ssids' style='border:0px'>
-      <tr>
-        <th>SSID</th>
-        <th>Password</th>
-        <th>Wifi Type</th>
-      </tr>
-      {{existingSSIDs}}
-      <tr>
-        <td colspan=3 style='text-align:center'>
-          <button type="button" onclick="addNew()" id='add-new-button' style='width:100%; height:40px; margin-top:20px'>A&#241;adir otro
-            SSID</button>
-        </td>
-      </tr>
-      <tr>
-        <td colspan=3 style='text-align:center'>
-          <button type="button" onclick="prepareAndSendData()" id='save-all-button' style='width:150px; height:70px; margin-top:30px'>Guardar</button>
-        </td>
-      </tr>
-      <tr>
-        <td colspan=3 style='text-align:center'>
-          <a href="/"><button type="button" id='return-button' style='width:150px; height:70px; margin-top:10px'>Volver</button></a>
-        </td>
-      </tr>
-    </table>
-  </form>
+  <div id="page-container">
+    <h1 id='title'>SSIDs Configuration page</h1>
+    <form>
+      <div id="ssid-container">
+      </div>
+
+    </form>
+    <div class="action-buttons">
+      <button type="button" id='add-new-button' onclick="addNew()">Añadir otro SSID</button>
+      <button type="button" id='save-all-button' onclick="prepareAndSendData()">Guardar</button>
+      <button type="button" id='return-button' onclick="window.location='/'">Volver</button></a>
+    </div>
+  </div>
+
+  <div id="dummydata">
+    [{"ssid":"GD57A", "pwd":"foobar1", "type":"standard"}, 
+     {"ssid":"CasaDeNemo", "pwd":"foobar1", "type":"phone"},
+     {"ssid":"Custom", "pwd":"foobar1", "type":"custom", "ip":"customip", "mask":"custommask",
+    "gateway":"customgateway"}]
+  </div>
+  <div id="data">
+    {{existingSSIDs}}
+  </div>
 </body>
 
 </html>

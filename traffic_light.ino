@@ -4,6 +4,7 @@
 #include <EasyDDNS.h>
 #include "FS.h"
 #include <ArduinoJson.h>
+#include "TinyUPnP.h"
 
 String SSIDS_FILE = "/ssids.json";
 String SETTINGS_FILE = "/settings.json";
@@ -16,11 +17,15 @@ struct ssid
 {
   String ssid;
   String pwd;
-  bool type;
+  String type;
+  String ip;
+  String gateway;
+  String mask;
 };
 
-ESP8266WebServer webserver;
 MDNSResponder mdns;
+TinyUPnP *tinyUPnP = new TinyUPnP(UPNP_LEASE_TIME);
+ESP8266WebServer webserver(UPNP_LISTEN_PORT);
 
 const int d0 = 16;
 const int d5 = 14;
@@ -41,11 +46,31 @@ boolean RED_TO_GREEN = true;
 boolean GREEN_TO_RED = true;
 String AP_NAME = "semaforito";
 String DEFAULT_IP = "192.168.1.23";
+String DEFAULT_GATEWAY = "192.168.1.1";
+String DEFAULT_MASK ="255.255.255.0";
 String PHONE_IP = "192.168.43.23";
+String PHONE_GATEWAY = "192.168.43.1";
+String PHONE_MASK ="255.255.255.0";
 String AP_IP = "192.168.1.23";
 String DYN_DNS_URL = "semaforo.myddns.me";
-String DYN_DNS_USERNAME = "ggonzalezmartin@gmail.com";
+String DYN_DNS_USERNAME = "username@no-ip.com";
 String DYN_DNS_PWD = "foobar1";
+int UPNP_LISTEN_PORT = 5123;
+int UPNP_LEASE_TIME = 36000;
+
+void definePins()
+{
+  Serial.println("[DefinePins]");
+  pinMode(green, OUTPUT);
+  pinMode(yellow, OUTPUT);
+  pinMode(red, OUTPUT);
+  pinMode(GND, OUTPUT);
+  digitalWrite(GND, LOW);
+  digitalWrite(BUILTIN_LED, HIGH);
+  Serial.println("\n\tPins set.");
+  Serial.println("");
+}
+
 
 void convertToIp(String ip, int ipArray[4])
 {
@@ -71,18 +96,6 @@ void resetSPIFFS()
   Serial.println("");
 }
 
-void definePins()
-{
-  Serial.println("[DefinePins]");
-  pinMode(green, OUTPUT);
-  pinMode(yellow, OUTPUT);
-  pinMode(red, OUTPUT);
-  pinMode(GND, OUTPUT);
-  digitalWrite(GND, LOW);
-  digitalWrite(BUILTIN_LED, HIGH);
-  Serial.println("\n\tPins set.");
-  Serial.println("");
-}
 
 String loadFile(String filename)
 {
@@ -127,17 +140,24 @@ void loadSettings(String filename)
   DynamicJsonDocument doc(1024);
   auto error = deserializeJson(doc, s);
 
+//TODO insert control for if s is shizze (no file loaded?)
+
   AMBER_TIME = doc["transition_speed"];
   AMBER_TRANSITION = doc["amber_transition"];
   RED_TO_GREEN = doc["red_to_green"];
   GREEN_TO_RED = doc["green_to_red"];
-  AP_NAME = doc["ap_name"].as<String>();
   DEFAULT_IP = doc["default_ip"].as<String>();
+  DEFAULT_GATEWAY = doc["default_gateway"].as<String>();
+  DEFAULT_MASK = doc["default_mask"].as<String>();
   PHONE_IP = doc["phone_ip"].as<String>();
+  PHONE_GATEWAY = doc["phone_gateway"].as<String>();
+  PHONE_MASK = doc["phone_mask"].as<String>();
+  AP_NAME = doc["ap_name"].as<String>();
   AP_IP = doc["ap_ip"].as<String>();
   DYN_DNS_URL = doc["dyn_dns_url"].as<String>();
   DYN_DNS_USERNAME = doc["dyn_dns_username"].as<String>();
   DYN_DNS_PWD = doc["dyn_dns_pwd"].as<String>();
+  UPNP_LISTEN_PORT = doc["listen_port"];
 
   String str = "[loadSettings]"
                "\n\tTransition speed: " +
@@ -153,8 +173,14 @@ void loadSettings(String filename)
                "\n\tDynDNS:" +
                "\n\t   URL: " + DYN_DNS_URL +
                "\n\t   Username: " + DYN_DNS_USERNAME +
-               "\n\t   Password: " + DYN_DNS_PWD;
+               "\n\t   Password: " + mask(DYN_DNS_PWD);
+               "\n\tuPnP: " +
+               "\n\t   Listen port: " + UPNP_LISTEN_PORT;
   Serial.println(str);
+}
+
+String mask(String str){
+  return "*******";
 }
 
 int loadSSIDs(String filename, ssid availableSlots[])
@@ -178,6 +204,25 @@ int loadSSIDs(String filename, ssid availableSlots[])
     availableSlots[i].ssid = doc[i]["ssid"].as<String>();
     availableSlots[i].pwd = doc[i]["pwd"].as<String>();
     availableSlots[i].type = doc[i]["type"];
+    if(availableSlots[i].type =="standard")
+    {
+      availableSlots[i].ip = DEFAULT_IP;
+      availableSlots[i].gateway = DEFAULT_GATEWAY;
+      availableSlots[i].mask = DEFAULT_MASK;
+    }
+    else if(availableSlots[i].type =="phone")
+    {
+      availableSlots[i].ip = PHONE_IP;
+      availableSlots[i].gateway = PHONE_GATEWAY;
+      availableSlots[i].mask = PHONE_MASK;
+    }
+    else if(availableSlots[i].type =="custom")
+    {
+      availableSlots[i].ip = doc[i]["ip"];
+      availableSlots[i].gateway = doc[i]["gateway"];
+      availableSlots[i].mask = doc[i]["mask"];
+    }
+
     //printEntryString(String(i + 1), availableSlots[i].ssid, availableSlots[i].pwd, availableSlots[i].type);
   }
 
@@ -186,7 +231,7 @@ int loadSSIDs(String filename, ssid availableSlots[])
 
 void debugPrintSSIDsInFile(String filename)
 {
-  ssid ssidSlots[20];
+  ssid ssidSlots[10];
   int n = loadSSIDs(filename, ssidSlots);
   Serial.println();
   Serial.println("[debugPrintSSIDsInFile]");
@@ -198,7 +243,7 @@ void debugPrintSSIDsInFile(String filename)
 
 String printEntryString(String n, String ssid, String pwd, boolean type)
 {
-  String s = "\t  " + n + ". " + ssid + " - " + pwd + " (" + type + ")";
+  String s = "\t  " + n + ". " + ssid + " - " + mask(pwd) + " (" + type + ")";
   Serial.println(s);
   return s;
 }
@@ -209,7 +254,7 @@ String printEntry(ssid entry)
 }
 ssid findValidWifi(String filename)
 {
-  ssid ssidSlots[20];
+  ssid ssidSlots[10];
   int n = loadSSIDs(filename, ssidSlots);
 
   int nbVisibleNetworks = 0;
@@ -255,6 +300,8 @@ ssid findValidWifi(String filename)
 void connectToWifi(ssid wifiData)
 {
   int ip[4];
+  int gateway[4];
+  int mask[4];
   Serial.println("[connectToWifi]");
   Serial.print("\tConnecting to selected wifi: ");
   printEntry(wifiData);
@@ -262,17 +309,13 @@ void connectToWifi(ssid wifiData)
   WiFi.begin(wifiData.ssid, wifiData.pwd);
 
   //IP Handling
-  convertToIp(DEFAULT_IP, ip);
-  IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
-  IPAddress gateway(192, 168, 1, 1);
-  if (wifiData.type)
-  {
-    convertToIp(PHONE_IP, ip);
-    IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
-    IPAddress gateway(192, 168, 43, 150);
-  }
+  convertToIp(wifiData.ip, ip);
+  convertToIp(wifiData.gateway, gateway);
+  convertToIp(wifiData.mask, mask);
 
-  IPAddress subnet(255, 255, 255, 0);
+  IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
+  IPAddress gateway(gateway[0], gateway[1], gateway[2], gateway[3]);
+  IPAddress subnet(mask[0], mask[1], mask[2], mask[3]);
 
   if (!WiFi.config(local_IP, gateway, subnet))
     Serial.println("STA Failed to configure");
@@ -283,10 +326,12 @@ void connectToWifi(ssid wifiData)
   // WiFi Connected
   Serial.println("");
   Serial.println("\tConnected!");
-  Serial.print("\t IP: ");
+  Serial.print("\t  ");
+  Serial.println(wifiData.ssid);
+  Serial.print("\t  IP: ");
   Serial.println(WiFi.localIP());
-  Serial.print("\t MAC: ");
-  Serial.println( WiFi.macAddress());
+  Serial.print("\t  MAC: ");
+  Serial.println(WiFi.macAddress());
 }
 
 void initializeAsAP()
@@ -298,7 +343,7 @@ void initializeAsAP()
   Serial.println(WiFi.softAPConfig(IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
   Serial.print("Setting soft-AP ... ");
   Serial.println(WiFi.softAP(AP_NAME + "_AP") ? "Ready" : "Failed!");
-  Serial.print("Soft-AP IP address = ");
+  Serial.print("Soft-AP IP address: ");
   Serial.println(WiFi.softAPIP());
 }
 void establishDDNS()
@@ -312,6 +357,33 @@ void establishDDNS()
   });
   Serial.println("\tDynDNS " + DYN_DNS_URL + " is up and running");
 }
+
+void establishUPnP()
+{
+  Serial.println("[Establishing UPnP]");
+    portMappingResult portMappingAdded;
+    tinyUPnP->addPortMappingConfig(WiFi.localIP(), UPNP_LISTEN_PORT, RULE_PROTOCOL_TCP, UPNP_LEASE_TIME, AP_NAME);
+    Serial.print("\tService name: ");
+    Serial.println(AP_NAME);
+    Serial.print("\tListen Port: ");
+    Serial.println(UPNP_LISTEN_PORT);
+    Serial.print("\tLease Time: ");
+    Serial.println(UPNP_LEASE_TIME);
+
+    portMappingAdded = tinyUPnP->commitPortMappings();
+    Serial.println("\t----------------------------------------------");
+    Serial.println("\t----------------------------------------------");
+    Serial.println("\t----------------------------------------------");
+    Serial.println("\t----------------------------------------------");
+    Serial.println("\t----------------------------------------------");
+    Serial.println("\ttinyUPnP -> printAllPortMappings after trying to set uPnP");
+    Serial.println("\t----------------------------------------------");
+    tinyUPnP->printPortMappingConfig();
+
+  ssdpDeviceNode* ssdpDeviceNodeList = tinyUPnP->listSsdpDevices();
+  tinyUPnP->printSsdpDevices(ssdpDeviceNodeList);
+}
+
 void establishmDNS()
 {
   Serial.println("[Establishing mDNS]");
@@ -323,7 +395,7 @@ void establishmDNS()
   MDNS.update();
   MDNS.addService("http", "tcp", 80);
   MDNS.addService("https", "tcp", 80);
-  Serial.println("\tMDNS responder is up and running on " + AP_NAME +".local");
+  Serial.println("\tMDNS responder is up and running on " + AP_NAME + ".local");
 }
 
 // WEBSERVER functions
@@ -365,27 +437,13 @@ String getSSIDSettingsHTML()
 {
   //  Serial.println("Composing HTML");
   String htmlCode = loadFile(SSID_SETTINGS_HTML_FILE);
-  String storedSSIDsInHTML = "";
-  ssid storedOptions[20];
-  int n = loadSSIDs(SSIDS_FILE, storedOptions);
+  ssid storedOptions[10];
+  
+  String ssidsJson = loadFile(SSIDS_FILE);
+  Serial.println("SSIDS Json file read: ");
+  Serial.println(ssidsJson);
 
-  for (int i = 0; i < n; i++)
-  {
-    String standard_checked = storedOptions[i].type ? "" : "checked";
-    String phone_checked = storedOptions[i].type ? "checked" : "";
-    String n = String(i + 1);
-    storedSSIDsInHTML += ""
-                         "  <tr id='container_" +
-                         n + "'>" +
-                         "     <td><input type='text' class='ssid' name='ssid_" + n + "' value='" + storedOptions[i].ssid + "'/></td>" +
-                         "     <td><input type='password' class='pwd' name='pwd_" + n + "' value='" + storedOptions[i].pwd + "'/></td>" +
-                         "     <td><input class='type' type='radio'  name='type_" + n + "' value='standard' " + standard_checked + "><label>Standard</label></input><br>" +
-                         "         <input class='radio' type='radio' name='type_" + n + "' value='phone'    " + phone_checked + "><label>Phone (Tether)</label></input>" +
-                         "  </tr>";
-  }
-  //  Serial.println(storedSSIDsInHTML);
-
-  htmlCode.replace("{{existingSSIDs}}", storedSSIDsInHTML);
+  htmlCode.replace("{{existingSSIDs}}", ssidsJson);
   //  Serial.println("HTML Code read: ");
   //  Serial.println(htmlCode);
   return htmlCode;
@@ -404,7 +462,7 @@ String getGeneralSettingsHTML()
   htmlCode.replace("{{dyn_dns_url}}", DYN_DNS_URL);
   htmlCode.replace("{{dyn_dns_username}}", DYN_DNS_USERNAME);
   htmlCode.replace("{{dyn_dns_pwd}}", DYN_DNS_PWD);
-
+  htmlCode.replace("{{listen_port}}", UPNP_LISTEN_PORT);
 
   //  Serial.println(htmlCode);
   return htmlCode;
@@ -474,19 +532,19 @@ void settingsPage()
 
 void processSettings()
 {
-    setSettings(webserver.arg("plain"));
+  setSettings(webserver.arg("plain"));
 }
 void resetSettings()
 {
-    setSettings(loadFile(DEFAULT_SETTINGS_FILE));
+  setSettings(loadFile(DEFAULT_SETTINGS_FILE));
 }
 
 void setSettings(String values)
 {
-    saveToFile(SETTINGS_FILE, values);
-    loadSettings(SETTINGS_FILE);
-    webserver.sendHeader("Location", "/SETTINGS");
-    webserver.send(303);
+  saveToFile(SETTINGS_FILE, values);
+  loadSettings(SETTINGS_FILE);
+  webserver.sendHeader("Location", "/SETTINGS");
+  webserver.send(303);
 }
 
 void processSSIDS()
@@ -559,7 +617,11 @@ void initialiseTrafficLight()
 void transition(int high, int mid, int low)
 {
   analogWrite(mid, 300);
-  analogWrite(high, 1023);
+  if (AMBER_TRANSITION)
+    analogWrite(high, 1023);
+  else
+    analogWrite(high, 0);
+
   analogWrite(low, 0);
   return;
 }
@@ -591,25 +653,46 @@ void turnTrafficLightOff()
   }
   all(0);
 }
+boolean connectToWifi()
+{
+  ssid validWifi = findValidWifi(SSIDS_FILE);
 
+  Serial.println("\tSelected wifi to connect:");
+  printEntry(validWifi);
+  if (validWifi.ssid != "")
+  {
+    connectToWifi(validWifi);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
 void setup()
 {
+  WiFi.setAutoConnect(0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
-
+  Serial.println("---------------------");
+  Serial.println("---------------------");
+  Serial.println("[Initialising system]");
+  Serial.println("---------------------");
+  Serial.println("---------------------");
   //resetSPIFFS();
   definePins();
   setTrafficLightAsLoading();
 
   loadSettings(SETTINGS_FILE);
-  ssid validWifi = findValidWifi(SSIDS_FILE);
+  bool connected = connectToWifi();
 
-  Serial.println("\tSelected wifi to connect:");
-  printEntry(validWifi);
+  // establishmDNS();
+  initialiseWebServer();
+  initialiseTrafficLight();
 
-  if (validWifi.ssid != "")
+  if (connected)
   {
-    connectToWifi(validWifi);
+    establishUPnP();
     establishDDNS();
   }
   else
@@ -617,14 +700,11 @@ void setup()
     // BE AP
     initializeAsAP();
   }
-
-  // establishmDNS();
-  initialiseWebServer();
-  initialiseTrafficLight();
 }
 
 void loop()
 {
   MDNS.update();
   webserver.handleClient();
+  tinyUPnP->updatePortMappings(UPNP_LEASE_TIME);
 }

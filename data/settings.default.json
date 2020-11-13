@@ -4,11 +4,15 @@
     "red_to_green":true,
     "green_to_red":true,
     "default_ip":"192.168.1.23",
+    "default_gateway":"192.168.1.1",
+    "default_mask":"255.255.255.0",
     "phone_ip":"192.168.43.23",
+    "phone_gateway":"192.168.43.150",
+    "phone_mask":"255.255.255.0",
     "ap_ip":"192.168.1.23",
     "ap_name":"semaforito",
-    "dyn_dns_url":"",
-    "dyn_dns_username":"",
-    "dyn_dns_pwd":""
-
+    "dyn_dns_url":"semaforo.myddns.me",
+    "dyn_dns_username":"ggonzalezmartin@gmail.com",
+    "dyn_dns_pwd":"PUT0noip!",
+    "listen_port":5123
 }

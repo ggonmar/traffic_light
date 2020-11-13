@@ -2,26 +2,26 @@
     {
         "ssid": "GD57A",
         "pwd": "En1lug@rdelaMancha",
-        "type": false
+        "type": "standard"
     },
     {
         "ssid": "Poliwifi",
         "pwd": "fader1946",
-        "type": false
+        "type": "standard"
     },
     {
         "ssid": "LaCasaDeNemo",
         "pwd": "Olivia2017",
-        "type": false
+        "type": "standard"
     },
     {
         "ssid": "JuanPlas",
         "pwd": "internet",
-        "type": true
+        "type": "phone"
     },
     {
         "ssid": "Polis8",
         "pwd": "milepolis8",
-        "type": true
+        "type": "phone"
     }
 ]

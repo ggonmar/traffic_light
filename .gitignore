@@ -1,2 +1,5 @@
-data/good_ssids.txt
-good_ssids.backup.txt
+data/ssids.json
+data/ssids.backup.json
+data/settings.json
+LaCasaDeNemo
+GD57A
