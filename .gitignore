@@ -1,6 +1,6 @@
-data/ssids.json
-data/ssids.backup.json
-data/settings.json
-data/settings.default.json
+/data/ssids.json
+/data/ssids.backup.json
+/data/settings.json
+/data/settings.default.json
 LaCasaDeNemo
 GD57A
