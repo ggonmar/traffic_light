@@ -150,8 +150,7 @@
         assignValues("{{default_wifi_ip}}}", "{{default_wifi_gateway}}", "{{default_wifi_mask}}");
       else if (status =="custom")
       {
-        let locator= ['file','127.0.'].some((e)=> location.origin.includes(e)) ? "dummydata" : "data";
-        let x = document.getElementById(locator).innerText;
+        let x = document.getElementById('data').innerText;
         x = JSON.parse(x);
         x=x.find(e => e.ssid == document.getElementById(`ssid_${index}`).value);
         assignValues(x.ip, x.gateway, x.mask);
