@@ -2,6 +2,7 @@
 <title>[ADMIN] Semaforo de Reunion 2.0 </title>
 
 <head>
+  <meta charset="UTF-8">
   <style type="text/css">
     #page-container {
       display: flex;
@@ -147,7 +148,7 @@
       if (status == "phone")
         assignValues("{{default_phone_ip}}", "{{default_phone_gateway}}", "{{default_phone_mask}}");
       else if (status == "standard")
-        assignValues("{{default_wifi_ip}}}", "{{default_wifi_gateway}}", "{{default_wifi_mask}}");
+        assignValues("{{default_wifi_ip}}", "{{default_wifi_gateway}}", "{{default_wifi_mask}}");
       else if (status =="custom")
       {
         let locator= ['file','127.0.'].some((e)=> location.origin.includes(e)) ? "dummydata" : "data";

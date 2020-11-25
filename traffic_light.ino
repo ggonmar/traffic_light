@@ -24,17 +24,19 @@ struct ssid
 };
 
 MDNSResponder mdns;
-TinyUPnP *tinyUPnP = new TinyUPnP(UPNP_LEASE_TIME);
-ESP8266WebServer webserver(UPNP_LISTEN_PORT);
 
 const int d0 = 16;
 const int d5 = 14;
 const int d6 = 12;
 const int d7 = 13;
+const int d4 = 2;
+const int d3 = 0;
 
 const int green = d6;
 const int yellow = d5;
 const int red = d0;
+const int button = d3;
+
 int colors[] = {green, yellow, red};
 const int GND = d7;
 boolean semaforoAbierto = true;
@@ -47,16 +49,22 @@ boolean GREEN_TO_RED = true;
 String AP_NAME = "semaforito";
 String DEFAULT_IP = "192.168.1.23";
 String DEFAULT_GATEWAY = "192.168.1.1";
-String DEFAULT_MASK ="255.255.255.0";
+String DEFAULT_MASK = "255.255.255.0";
 String PHONE_IP = "192.168.43.23";
 String PHONE_GATEWAY = "192.168.43.1";
-String PHONE_MASK ="255.255.255.0";
+String PHONE_MASK = "255.255.255.0";
 String AP_IP = "192.168.1.23";
-String DYN_DNS_URL = "semaforo.myddns.me";
-String DYN_DNS_USERNAME = "username@no-ip.com";
-String DYN_DNS_PWD = "foobar1";
+String DDNS_SERVICE = "";
+String DDNS_URL = "";
+String DDNS_USERNAME = "";
+String DDNS_PWD = "";
 int UPNP_LISTEN_PORT = 5123;
-int UPNP_LEASE_TIME = 36000;
+int UPNP_LEASE_TIME = 360000;
+boolean UPNP_ENABLED = false;
+boolean DDNS_ENABLED = false;
+
+TinyUPnP *tinyUPnP = new TinyUPnP(UPNP_LEASE_TIME);
+ESP8266WebServer webserver(UPNP_LISTEN_PORT);
 
 void definePins()
 {
@@ -65,24 +73,26 @@ void definePins()
   pinMode(yellow, OUTPUT);
   pinMode(red, OUTPUT);
   pinMode(GND, OUTPUT);
+  pinMode(BUILTIN_LED, OUTPUT);
+
+  pinMode(button, INPUT_PULLUP);
   digitalWrite(GND, LOW);
   digitalWrite(BUILTIN_LED, HIGH);
-  Serial.println("\n\tPins set.");
-  Serial.println("");
+  Serial.println("\tPins set.");
 }
 
-
-void convertToIp(String ip, int ipArray[4])
+void convertToIp(String ip, int ipArray[])
 {
   int firstSplit = ip.indexOf(".");
   int secondSplit = ip.indexOf(".", firstSplit + 1);
   int thirdSplit = ip.indexOf(".", secondSplit + 1);
+
   ipArray[0] = ip.substring(0, firstSplit).toInt();
   ipArray[1] = ip.substring(firstSplit + 1, secondSplit).toInt();
   ipArray[2] = ip.substring(secondSplit + 1, thirdSplit).toInt();
   ipArray[3] = ip.substring(thirdSplit + 1).toInt();
 
-  //  Serial.println(String(ipArray[0]) + ":" + String(ipArray[1]) + ":" + String(ipArray[2]) + ":" + String(ipArray[3]));
+//  Serial.println(String(ipArray[0]) + ":" + String(ipArray[1]) + ":" + String(ipArray[2]) + ":" + String(ipArray[3]));
 }
 
 void resetSPIFFS()
@@ -95,7 +105,6 @@ void resetSPIFFS()
   Serial.println("\n\tSPIFFS FORMATTED");
   Serial.println("");
 }
-
 
 String loadFile(String filename)
 {
@@ -137,30 +146,34 @@ void loadSettings(String filename)
 {
   Serial.println("[loadSettings]");
   String s = loadFile(filename);
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   auto error = deserializeJson(doc, s);
+  Serial.println(s);
 
-//TODO insert control for if s is shizze (no file loaded?)
-
-  AMBER_TIME = doc["transition_speed"];
-  AMBER_TRANSITION = doc["amber_transition"];
-  RED_TO_GREEN = doc["red_to_green"];
-  GREEN_TO_RED = doc["green_to_red"];
-  DEFAULT_IP = doc["default_ip"].as<String>();
-  DEFAULT_GATEWAY = doc["default_gateway"].as<String>();
-  DEFAULT_MASK = doc["default_mask"].as<String>();
-  PHONE_IP = doc["phone_ip"].as<String>();
-  PHONE_GATEWAY = doc["phone_gateway"].as<String>();
-  PHONE_MASK = doc["phone_mask"].as<String>();
-  AP_NAME = doc["ap_name"].as<String>();
-  AP_IP = doc["ap_ip"].as<String>();
-  DYN_DNS_URL = doc["dyn_dns_url"].as<String>();
-  DYN_DNS_USERNAME = doc["dyn_dns_username"].as<String>();
-  DYN_DNS_PWD = doc["dyn_dns_pwd"].as<String>();
-  UPNP_LISTEN_PORT = doc["listen_port"];
-
-  String str = "[loadSettings]"
-               "\n\tTransition speed: " +
+  if(s.length()>0)
+  {
+    //TODO insert control for if s is shizze (no file loaded?)
+    AMBER_TIME = doc["transition_speed"];
+    AMBER_TRANSITION = doc["amber_transition"];
+    RED_TO_GREEN = doc["red_to_green"];
+    GREEN_TO_RED = doc["green_to_red"];
+    DEFAULT_IP = doc["default_ip"].as<String>();
+    DEFAULT_GATEWAY = doc["default_gateway"].as<String>();
+    DEFAULT_MASK = doc["default_mask"].as<String>();
+    PHONE_IP = doc["phone_ip"].as<String>();
+    PHONE_GATEWAY = doc["phone_gateway"].as<String>();
+    PHONE_MASK = doc["phone_mask"].as<String>();
+    AP_NAME = doc["ap_name"].as<String>();
+    AP_IP = doc["ap_ip"].as<String>();
+    DDNS_ENABLED = doc["ddns_enabled"];
+    DDNS_SERVICE = doc["ddns_service"].as<String>();
+    DDNS_URL = doc["ddns_url"].as<String>();
+    DDNS_USERNAME = doc["ddns_username"].as<String>();
+    DDNS_PWD = doc["ddns_pwd"].as<String>();
+    UPNP_ENABLED = doc["upnp_enabled"];
+    UPNP_LISTEN_PORT = doc["listen_port"];
+  }
+  String str = "\n\tTransition speed: " +
                String(AMBER_TIME) +
                "\n\tPass by Amber? " + String(AMBER_TRANSITION) +
                "\n\t   When Red to Green? " + String(RED_TO_GREEN) +
@@ -169,17 +182,21 @@ void loadSettings(String filename)
                "\n\tDefault IPs:" +
                "\n\t   Standard: " + DEFAULT_IP +
                "\n\t   Phone (tether): " + PHONE_IP +
-               "\n\t   AP: " + AP_IP +
+               "\n\t   AP IP: " + AP_IP +
                "\n\tDynDNS:" +
-               "\n\t   URL: " + DYN_DNS_URL +
-               "\n\t   Username: " + DYN_DNS_USERNAME +
-               "\n\t   Password: " + mask(DYN_DNS_PWD);
+               "\n\t   Enabled: " + String(DDNS_ENABLED) +
+               "\n\t   Service: " + DDNS_SERVICE +
+               "\n\t   URL: " + DDNS_URL +
+               "\n\t   Username: " + DDNS_USERNAME +
+               "\n\t   Password: " + mask(DDNS_PWD) +
                "\n\tuPnP: " +
-               "\n\t   Listen port: " + UPNP_LISTEN_PORT;
+               "\n\t   Enabled: " + String(UPNP_ENABLED);
+               "\n\t   Listen port: " + String(UPNP_LISTEN_PORT);
   Serial.println(str);
 }
 
-String mask(String str){
+String mask(String str)
+{
   return "*******";
 }
 
@@ -189,13 +206,14 @@ int loadSSIDs(String filename, ssid availableSlots[])
   SPIFFS.begin();
   String s = loadFile(filename);
 
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   auto error = deserializeJson(doc, s);
   if (error)
   {
     Serial.print(F("deserializeJson() failed with code "));
     Serial.println(error.c_str());
-    deserializeJson(doc, "[]");
+    Serial.println(s);
+    return 0;
   }
 
   //Serial.println("[loadSSIDs]   In file: " + String(doc.size()) + " elements:");
@@ -203,27 +221,27 @@ int loadSSIDs(String filename, ssid availableSlots[])
   {
     availableSlots[i].ssid = doc[i]["ssid"].as<String>();
     availableSlots[i].pwd = doc[i]["pwd"].as<String>();
-    availableSlots[i].type = doc[i]["type"];
-    if(availableSlots[i].type =="standard")
+    availableSlots[i].type = doc[i]["type"].as<String>();
+    if (availableSlots[i].type == "standard")
     {
       availableSlots[i].ip = DEFAULT_IP;
       availableSlots[i].gateway = DEFAULT_GATEWAY;
       availableSlots[i].mask = DEFAULT_MASK;
     }
-    else if(availableSlots[i].type =="phone")
+    else if (availableSlots[i].type == "phone")
     {
       availableSlots[i].ip = PHONE_IP;
       availableSlots[i].gateway = PHONE_GATEWAY;
       availableSlots[i].mask = PHONE_MASK;
     }
-    else if(availableSlots[i].type =="custom")
+    else if (availableSlots[i].type == "custom")
     {
-      availableSlots[i].ip = doc[i]["ip"];
-      availableSlots[i].gateway = doc[i]["gateway"];
-      availableSlots[i].mask = doc[i]["mask"];
+      availableSlots[i].ip = doc[i]["ip"].as<String>();
+      availableSlots[i].gateway = doc[i]["gateway"].as<String>();
+      availableSlots[i].mask = doc[i]["mask"].as<String>();
     }
-
-    //printEntryString(String(i + 1), availableSlots[i].ssid, availableSlots[i].pwd, availableSlots[i].type);
+    Serial.println("\tElligible SSIDs:");
+    printEntryString(String(i + 1), availableSlots[i].ssid, mask(availableSlots[i].pwd), availableSlots[i].type);
   }
 
   return doc.size();
@@ -255,7 +273,12 @@ String printEntry(ssid entry)
 ssid findValidWifi(String filename)
 {
   ssid ssidSlots[10];
+  ssid correctOne = {ssid : "", pwd : "", type : "standard"};
   int n = loadSSIDs(filename, ssidSlots);
+  if(n==0){
+      Serial.println("\tNo SSIDs stored on file.");
+      return correctOne;
+  } 
 
   int nbVisibleNetworks = 0;
   while (nbVisibleNetworks == 0)
@@ -270,10 +293,9 @@ ssid findValidWifi(String filename)
   }
 
   boolean foundValidWifi = false;
-  int attempts = 20;
+  int attempts = 10;
   int i = 0;
   int j;
-  ssid correctOne = {ssid : "", pwd : "", type : false};
   while (foundValidWifi == false && attempts > 0)
   {
     String candidate_ssid = WiFi.SSID(i);
@@ -300,7 +322,7 @@ ssid findValidWifi(String filename)
 void connectToWifi(ssid wifiData)
 {
   int ip[4];
-  int gateway[4];
+  int gt[4];
   int mask[4];
   Serial.println("[connectToWifi]");
   Serial.print("\tConnecting to selected wifi: ");
@@ -308,16 +330,18 @@ void connectToWifi(ssid wifiData)
 
   WiFi.begin(wifiData.ssid, wifiData.pwd);
 
+  establishDDNS();
+
   //IP Handling
   convertToIp(wifiData.ip, ip);
-  convertToIp(wifiData.gateway, gateway);
+  convertToIp(wifiData.gateway, gt);
   convertToIp(wifiData.mask, mask);
 
   IPAddress local_IP(ip[0], ip[1], ip[2], ip[3]);
-  IPAddress gateway(gateway[0], gateway[1], gateway[2], gateway[3]);
+  IPAddress gateway(gt[0], gt[1], gt[2], gt[3]);
   IPAddress subnet(mask[0], mask[1], mask[2], mask[3]);
-
-  if (!WiFi.config(local_IP, gateway, subnet))
+  IPAddress dns(8, 8, 8, 8);
+  if (!WiFi.config(local_IP, dns, gateway, subnet))
     Serial.println("STA Failed to configure");
 
   while (WiFi.status() != WL_CONNECTED)
@@ -333,13 +357,19 @@ void connectToWifi(ssid wifiData)
   Serial.print("\t  MAC: ");
   Serial.println(WiFi.macAddress());
 }
-
+String printIP(int ip[4])
+{
+  String s="";
+  for(int i=0; i<4; i++)
+    s += String(ip[i]);
+  return s;
+} 
 void initializeAsAP()
 {
-  int *ip;
-  digitalWrite(BUILTIN_LED, HIGH);
+  int ip[4];
+  digitalWrite(BUILTIN_LED, LOW);
   Serial.print("Setting soft-AP configuration ... ");
-  convertToIp(DEFAULT_IP, ip);
+  convertToIp(AP_IP, ip);
   Serial.println(WiFi.softAPConfig(IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(ip[0], ip[1], ip[2], ip[3]), IPAddress(255, 255, 255, 0)) ? "Ready" : "Failed!");
   Serial.print("Setting soft-AP ... ");
   Serial.println(WiFi.softAP(AP_NAME + "_AP") ? "Ready" : "Failed!");
@@ -348,39 +378,74 @@ void initializeAsAP()
 }
 void establishDDNS()
 {
-  Serial.println("[Establishing DynDNS]");
-  EasyDDNS.service("noip");
-  EasyDDNS.client(DYN_DNS_URL, DYN_DNS_USERNAME, DYN_DNS_PWD);
+  Serial.println("[Establishing DDNS]");
+  if(!DDNS_ENABLED)
+  {
+    Serial.println("\tDDNS is disabled");
+    return;
+  }
+  if(DDNS_SERVICE =="" || DDNS_URL =="" || DDNS_USERNAME =="" || DDNS_PWD ==""){ 
+    Serial.println("\tMissing credentials, please refer to Settings page");
+    return;
+  }
+
+  HTTPClient http;
+  http.begin("http://ipv4bot.whatismyipaddress.com/");
+  int httpCode = http.GET();
+  if (httpCode > 0)
+  {
+    if (httpCode == HTTP_CODE_OK)
+    {
+      Serial.print("\tHTTP request OK: ");
+      Serial.println(http.getString());
+    }
+    else
+      Serial.println("\tHTTP Request NOT OK: " + String(httpCode));
+  }
+  else
+  {
+    http.end();
+    Serial.println("\tHTTP Request Failed: " + String(httpCode));
+    return;
+  }
+  http.end();
+
+  EasyDDNS.service(DDNS_SERVICE);
+  EasyDDNS.client(DDNS_URL, DDNS_USERNAME, DDNS_PWD);
+  Serial.println("\tURL: " + DDNS_URL);
+  Serial.println("\tUSERNAME: " + DDNS_USERNAME);
+  Serial.println("\tPWD: " + DDNS_PWD);
   EasyDDNS.onUpdate([&](const char *oldIP, const char *newIP) {
     Serial.print("EasyDDNS - IP Change Detected: ");
     Serial.println(newIP);
   });
-  Serial.println("\tDynDNS " + DYN_DNS_URL + " is up and running");
+  Serial.println("\tDynDNS " + DDNS_URL + " is up and running");
 }
 
 void establishUPnP()
 {
   Serial.println("[Establishing UPnP]");
-    portMappingResult portMappingAdded;
-    tinyUPnP->addPortMappingConfig(WiFi.localIP(), UPNP_LISTEN_PORT, RULE_PROTOCOL_TCP, UPNP_LEASE_TIME, AP_NAME);
-    Serial.print("\tService name: ");
-    Serial.println(AP_NAME);
-    Serial.print("\tListen Port: ");
-    Serial.println(UPNP_LISTEN_PORT);
-    Serial.print("\tLease Time: ");
-    Serial.println(UPNP_LEASE_TIME);
 
-    portMappingAdded = tinyUPnP->commitPortMappings();
-    Serial.println("\t----------------------------------------------");
-    Serial.println("\t----------------------------------------------");
-    Serial.println("\t----------------------------------------------");
-    Serial.println("\t----------------------------------------------");
-    Serial.println("\t----------------------------------------------");
-    Serial.println("\ttinyUPnP -> printAllPortMappings after trying to set uPnP");
-    Serial.println("\t----------------------------------------------");
-    tinyUPnP->printPortMappingConfig();
+  if(!UPNP_ENABLED)
+  {
+    Serial.println("\tUPnP is disabled");
+    return;
+  }
 
-  ssdpDeviceNode* ssdpDeviceNodeList = tinyUPnP->listSsdpDevices();
+  portMappingResult portMappingAdded;
+  tinyUPnP->addPortMappingConfig(WiFi.localIP(), UPNP_LISTEN_PORT, RULE_PROTOCOL_TCP, UPNP_LEASE_TIME, AP_NAME);
+  Serial.print("\tService name: ");
+  Serial.println(AP_NAME);
+  Serial.print("\tListen Port: ");
+  Serial.println(UPNP_LISTEN_PORT);
+  Serial.print("\tLease Time: ");
+  Serial.println(UPNP_LEASE_TIME);
+
+  portMappingAdded = tinyUPnP->commitPortMappings();
+  Serial.println("\ttinyUPnP -> printAllPortMappings after trying to set uPnP");
+  tinyUPnP->printPortMappingConfig();
+
+  ssdpDeviceNode *ssdpDeviceNodeList = tinyUPnP->listSsdpDevices();
   tinyUPnP->printSsdpDevices(ssdpDeviceNodeList);
 }
 
@@ -408,6 +473,7 @@ void initialiseWebServer()
   webserver.on("/SETTINGS", HTTP_GET, settingsPage);
   webserver.on("/SETTINGS_SUBMIT", HTTP_POST, processSettings);
   webserver.on("/SETTINGS_RESET", HTTP_POST, resetSettings);
+  webserver.on("/FACTORY_RESET", HTTP_POST, factoryReset);
   webserver.on("/SSID_SETTINGS", HTTP_GET, ssidSettingsPage);
   webserver.on("/SSID_SETTINGS_SUBMIT", HTTP_POST, processSSIDS);
   webserver.onNotFound(notfoundPage);
@@ -438,12 +504,19 @@ String getSSIDSettingsHTML()
   //  Serial.println("Composing HTML");
   String htmlCode = loadFile(SSID_SETTINGS_HTML_FILE);
   ssid storedOptions[10];
-  
+
   String ssidsJson = loadFile(SSIDS_FILE);
-  Serial.println("SSIDS Json file read: ");
-  Serial.println(ssidsJson);
+//  Serial.println("SSIDS Json file read: ");
+//  Serial.println(ssidsJson);
 
   htmlCode.replace("{{existingSSIDs}}", ssidsJson);
+  htmlCode.replace("{{default_wifi_ip}}", DEFAULT_IP);
+  htmlCode.replace("{{default_wifi_gateway}}", DEFAULT_GATEWAY);
+  htmlCode.replace("{{default_wifi_mask}}", DEFAULT_MASK);
+  htmlCode.replace("{{default_phone_ip}}", PHONE_IP);
+  htmlCode.replace("{{default_phone_gateway}}", PHONE_GATEWAY);
+  htmlCode.replace("{{default_phone_mask}}", PHONE_MASK);
+
   //  Serial.println("HTML Code read: ");
   //  Serial.println(htmlCode);
   return htmlCode;
@@ -459,10 +532,13 @@ String getGeneralSettingsHTML()
   htmlCode.replace("{{phone_ip}}", PHONE_IP);
   htmlCode.replace("{{ap_ip}}", AP_IP);
   htmlCode.replace("{{ap_name}}", AP_NAME);
-  htmlCode.replace("{{dyn_dns_url}}", DYN_DNS_URL);
-  htmlCode.replace("{{dyn_dns_username}}", DYN_DNS_USERNAME);
-  htmlCode.replace("{{dyn_dns_pwd}}", DYN_DNS_PWD);
-  htmlCode.replace("{{listen_port}}", UPNP_LISTEN_PORT);
+  htmlCode.replace("{{ddns_enabled}}", DDNS_ENABLED ? "checked" : "");
+  htmlCode.replace("{{ddns_service}}", DDNS_SERVICE);
+  htmlCode.replace("{{ddns_url}}", DDNS_URL);
+  htmlCode.replace("{{ddns_username}}", DDNS_USERNAME);
+  htmlCode.replace("{{ddns_pwd}}", DDNS_PWD);
+  htmlCode.replace("{{upnp_enabled}}", UPNP_ENABLED ? "checked" : "");
+  htmlCode.replace("{{listen_port}}", String(UPNP_LISTEN_PORT));
 
   //  Serial.println(htmlCode);
   return htmlCode;
@@ -476,21 +552,7 @@ void rootPage()
 void handleTrafficLightStatus()
 {
   sendJSCall("Processing");
-  if (semaforoAbierto)
-  {
-    Serial.println("Cerrando semaforo");
-    cerrarSemaforo(AMBER_TIME);
-    semaforoAbierto = false;
-    sendJSCall("Cerrado");
-  }
-  else
-  {
-    Serial.println("Abriendo semaforo");
-    abrirSemaforo(AMBER_TIME);
-    semaforoAbierto = true;
-    sendJSCall("Abierto");
-  }
-
+  toggleTrafficLightStatus();
   webserver.sendHeader("Location", "/"); // Add a header to respond with a new location for the browser to go to the home page again
   webserver.send(303);
   Serial.println("Webserver relocation sent");
@@ -498,21 +560,7 @@ void handleTrafficLightStatus()
 void handleTrafficLightOnAndOff()
 {
   sendJSCall("Processing");
-  if (semaforoEncendido)
-  {
-    Serial.println("Apagando semaforo");
-    turnTrafficLightOff();
-    semaforoEncendido = false;
-    sendJSCall("Apagado");
-  }
-  else
-  {
-    Serial.println("Encendiendo semaforo");
-    initialiseTrafficLight();
-    semaforoEncendido = true;
-    sendJSCall("Encendido");
-  }
-
+  toggleTrafficLightOnOff();
   webserver.sendHeader("Location", "/"); // Add a header to respond with a new location for the browser to go to the home page again
   webserver.send(303);
   Serial.println("Webserver relocation sent");
@@ -534,6 +582,14 @@ void processSettings()
 {
   setSettings(webserver.arg("plain"));
 }
+
+void factoryReset()
+{
+  resetSPIFFS();
+  webserver.sendHeader("Location", "/SETTINGS");
+  webserver.send(303);
+
+}
 void resetSettings()
 {
   setSettings(loadFile(DEFAULT_SETTINGS_FILE));
@@ -550,7 +606,7 @@ void setSettings(String values)
 void processSSIDS()
 {
   String ssidsRaw = webserver.arg("plain");
-  DynamicJsonDocument doc(1024);
+  DynamicJsonDocument doc(2048);
   saveToFile(SSIDS_FILE, ssidsRaw);
   webserver.sendHeader("Location", "/SSID_SETTINGS");
   webserver.send(303);
@@ -570,7 +626,7 @@ void sendJSCall(String call)
 // Traffic light logic
 void cerrarSemaforo(int ambar_wait)
 {
-  if (AMBER_TRANSITION && GREEN_TO_RED)
+  if (GREEN_TO_RED)
   {
     transition(yellow, green, red);
     delay(ambar_wait * 1000);
@@ -580,13 +636,46 @@ void cerrarSemaforo(int ambar_wait)
 }
 void abrirSemaforo(int ambar_wait)
 {
-  if (AMBER_TRANSITION && RED_TO_GREEN)
+  if (RED_TO_GREEN)
   {
     transition(yellow, red, green);
     delay(ambar_wait * 1000);
     transition(green, yellow, red);
   }
   establishColor(green);
+}
+void toggleTrafficLightStatus(){
+  if (semaforoAbierto)
+  {
+    Serial.println("Cerrando semaforo");
+    cerrarSemaforo(AMBER_TIME);
+    semaforoAbierto = false;
+    sendJSCall("Cerrado");
+  }
+  else
+  {
+    Serial.println("Abriendo semaforo");
+    abrirSemaforo(AMBER_TIME);
+    semaforoAbierto = true;
+    sendJSCall("Abierto");
+  }
+}
+
+void toggleTrafficLightOnOff(){
+    if (semaforoEncendido)
+  {
+    Serial.println("Apagando semaforo");
+    turnTrafficLightOff();
+    semaforoEncendido = false;
+    sendJSCall("Apagado");
+  }
+  else
+  {
+    Serial.println("Encendiendo semaforo");
+    initialiseTrafficLight();
+    semaforoEncendido = true;
+    sendJSCall("Encendido");
+  }
 }
 void sequentialDemo()
 {
@@ -611,17 +700,19 @@ void setTrafficLightAsLoading()
 void initialiseTrafficLight()
 {
   sequentialDemo();
-  establishColor(green);
+  if (semaforoAbierto)
+    establishColor(green);
+  else
+    establishColor(red);
   return;
 }
 void transition(int high, int mid, int low)
 {
-  analogWrite(mid, 300);
   if (AMBER_TRANSITION)
-    analogWrite(high, 1023);
+    analogWrite(mid, 300);
   else
-    analogWrite(high, 0);
-
+    analogWrite(mid, 0);
+  analogWrite(high, 1023);
   analogWrite(low, 0);
   return;
 }
@@ -657,15 +748,19 @@ boolean connectToWifi()
 {
   ssid validWifi = findValidWifi(SSIDS_FILE);
 
-  Serial.println("\tSelected wifi to connect:");
-  printEntry(validWifi);
   if (validWifi.ssid != "")
   {
+    // Connect to wifi
+    Serial.println("\tSelected wifi to connect:");
+    printEntry(validWifi);
     connectToWifi(validWifi);
     return true;
   }
   else
   {
+    // Initialise as AP
+    Serial.println("\tNo wifi elligible to connect was found.");
+    initializeAsAP();
     return false;
   }
 }
@@ -686,7 +781,7 @@ void setup()
   loadSettings(SETTINGS_FILE);
   bool connected = connectToWifi();
 
-  // establishmDNS();
+  establishmDNS();
   initialiseWebServer();
   initialiseTrafficLight();
 
@@ -695,16 +790,28 @@ void setup()
     establishUPnP();
     establishDDNS();
   }
-  else
+}
+
+void handleButtonPush(){
+  int btn_Status = HIGH;
+  btn_Status = digitalRead (button);
+  if(btn_Status == LOW)
   {
-    // BE AP
-    initializeAsAP();
+  Serial.println("[buttonPush]");
+  Serial.println("\tSwitching traffic light status");
+   toggleTrafficLightStatus();
   }
 }
 
 void loop()
 {
   MDNS.update();
+  
   webserver.handleClient();
-  tinyUPnP->updatePortMappings(UPNP_LEASE_TIME);
+
+  handleButtonPush();
+  if(UPNP_ENABLED)
+    tinyUPnP->updatePortMappings(UPNP_LEASE_TIME);
+  if(DDNS_ENABLED)
+    EasyDDNS.update(UPNP_LEASE_TIME);
 }
